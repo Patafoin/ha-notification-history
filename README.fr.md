@@ -1,6 +1,10 @@
 # Notification History
 
-[English](README.md) · [Français](README.fr.md)
+[English](https://github.com/Patafoin/ha-notification-history/blob/main/README.md) · [Français](https://github.com/Patafoin/ha-notification-history/blob/main/README.fr.md)
+
+[![GitHub release](https://img.shields.io/github/v/release/Patafoin/ha-notification-history)](https://github.com/Patafoin/ha-notification-history/releases)
+[![Validate](https://github.com/Patafoin/ha-notification-history/actions/workflows/validate.yml/badge.svg)](https://github.com/Patafoin/ha-notification-history/actions/workflows/validate.yml)
+[![Tests](https://github.com/Patafoin/ha-notification-history/actions/workflows/tests.yml/badge.svg)](https://github.com/Patafoin/ha-notification-history/actions/workflows/tests.yml)
 
 Garde toutes les notifications envoyées par Home Assistant — aux téléphones et tablettes (app Companion, iOS et Android), aux enceintes, par e-mail ou vers toute autre cible `notify` — et les affiche dans une carte de tableau de bord, avec leur image, leur lien et leurs boutons.
 
@@ -26,11 +30,14 @@ Non enregistrés : les commandes de l'app Companion (`command_webview`, `clear_b
 
 ## Installation
 
-### Marketplace (HACS) — dépôt personnalisé
+[![Ouvrir ce dépôt dans la Marketplace (HACS).](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Patafoin&repository=ha-notification-history&category=integration)
 
-1. Paramètres → **Marketplace**, ajout depuis un lien → `https://github.com/Patafoin/ha-notification-history`. Avant Home Assistant 2026.11 : HACS → ⋮ → *Dépôts personnalisés* → la même URL, catégorie *Intégration*.
-2. Installer **Notification History**, puis redémarrer Home Assistant.
-3. *Paramètres → Appareils et services → Ajouter une intégration → Notification History*.
+1. Paramètres → **Marketplace**, cherchez **Notification History** et sélectionnez **Installer**. Avant Home Assistant 2026.11, faites la même recherche dans **HACS**, téléchargez-la, puis redémarrez Home Assistant.
+2. **Paramètres → Appareils et services → Ajouter une intégration → Notification History**.
+
+[![Ajouter l'intégration à votre Home Assistant.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=notification_history)
+
+Si la recherche ne la trouve pas, ajoutez le dépôt par son lien : dans la Marketplace, ajout depuis un lien → `https://github.com/Patafoin/ha-notification-history` ; dans HACS, ⋮ → **Dépôts personnalisés** → la même URL, type **Intégration**.
 
 ### Manuelle
 
@@ -69,9 +76,18 @@ La carte déclenche `mobile_app_notification_action` avec l'`action` du bouton (
 
 ## Services et API WebSocket
 
-- `notification_history.clear` (`target` facultatif) : vide l'historique.
-- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/run_action`.
+- `notification_history.clear` (`target` facultatif) : vide l'historique. Réservé aux administrateurs.
+- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/run_action`. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
+
+## Comment ça marche (pour les curieux)
+
+- Nouvelles notifications : écoute des évènements `call_service` du domaine `notify`. L'enregistrement se contente de lire les appels, il ne les modifie jamais.
+- Notifications passées : une seule requête en lecture de ces mêmes évènements `call_service` dans la base du recorder, lancée une fois dans l'exécuteur du recorder.
+- Téléphones et tablettes : l'appareil et son propriétaire viennent du registre des appareils et de l'entrée `mobile_app` (`device_id`, `device_name`, `user_id`). Le service hérité `notify.mobile_app_<appareil>` est reconnu par le nom que `mobile_app` lui donne ; aucun secret de `mobile_app` (identifiant de webhook, jetons) n'est lu.
+- Historique : `.storage/notification_history`, supprimé avec l'intégration. La carte est servie depuis `/notification_history/` et ajoutée comme ressource Lovelace (mode stockage).
+
+La liste des services des plateformes `notify` héritées est une partie interne de Home Assistant. Des tests automatiques tournent chaque semaine sur la dernière version pour repérer tôt un changement.
 
 ## Licence
 
-MIT
+[MIT](https://github.com/Patafoin/ha-notification-history/blob/main/LICENSE)

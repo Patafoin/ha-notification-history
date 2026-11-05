@@ -1,6 +1,10 @@
 # Notification History
 
-[English](README.md) · [Français](README.fr.md)
+[English](https://github.com/Patafoin/ha-notification-history/blob/main/README.md) · [Français](https://github.com/Patafoin/ha-notification-history/blob/main/README.fr.md)
+
+[![GitHub release](https://img.shields.io/github/v/release/Patafoin/ha-notification-history)](https://github.com/Patafoin/ha-notification-history/releases)
+[![Validate](https://github.com/Patafoin/ha-notification-history/actions/workflows/validate.yml/badge.svg)](https://github.com/Patafoin/ha-notification-history/actions/workflows/validate.yml)
+[![Tests](https://github.com/Patafoin/ha-notification-history/actions/workflows/tests.yml/badge.svg)](https://github.com/Patafoin/ha-notification-history/actions/workflows/tests.yml)
 
 Keeps every notification Home Assistant sends — to phones and tablets (Companion app, iOS and Android), speakers, e-mail or any other `notify` target — and shows them in a dashboard card, with their image, link and buttons.
 
@@ -26,11 +30,14 @@ Not recorded: Companion app commands (`command_webview`, `clear_badge`…), and 
 
 ## Installation
 
-### Marketplace (HACS) — custom repository
+[![Open this repository in the Marketplace (HACS).](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Patafoin&repository=ha-notification-history&category=integration)
 
-1. Settings → **Marketplace**, **Add from link** → `https://github.com/Patafoin/ha-notification-history`. Before Home Assistant 2026.11: HACS → ⋮ → *Custom repositories* → the same URL, category *Integration*.
-2. Install **Notification History**, then restart Home Assistant.
-3. *Settings → Devices & services → Add integration → Notification History*.
+1. Settings → **Marketplace**, search for **Notification History** and select **Install**. Before Home Assistant 2026.11, do the same search in **HACS**, download it, then restart Home Assistant.
+2. **Settings → Devices & services → Add integration → Notification History**.
+
+[![Add the integration to your Home Assistant.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=notification_history)
+
+If the search does not find it, add the repository by its link: in the Marketplace, **Add from link** → `https://github.com/Patafoin/ha-notification-history`; in HACS, ⋮ → **Custom repositories** → the same URL, type **Integration**.
 
 ### Manual
 
@@ -69,9 +76,18 @@ The card fires `mobile_app_notification_action` with the button's `action` (and 
 
 ## Services and WebSocket API
 
-- `notification_history.clear` (optional `target`): deletes the history.
-- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/run_action`.
+- `notification_history.clear` (optional `target`): deletes the history. Admin only.
+- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/run_action`. Non-admin users only get the notifications of their own devices.
+
+## How it works (for the curious)
+
+- New notifications: a listener on `call_service` events of the `notify` domain. Recording only reads the calls, it never changes them.
+- Past notifications: a single read-only query of those same `call_service` events in the recorder database, run once in the recorder's executor.
+- Phones and tablets: the device and its owner come from the device registry and the `mobile_app` entry (`device_id`, `device_name`, `user_id`). The legacy service `notify.mobile_app_<device>` is matched by the name `mobile_app` gives it; no `mobile_app` secret (webhook id, tokens) is read.
+- History: `.storage/notification_history`, deleted with the integration. The card is served from `/notification_history/` and added as a Lovelace resource (storage mode).
+
+The service list of legacy `notify` platforms is an internal part of Home Assistant. Automated tests run every week against the latest release to catch a change early.
 
 ## License
 
-MIT
+[MIT](https://github.com/Patafoin/ha-notification-history/blob/main/LICENSE)

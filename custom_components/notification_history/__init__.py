@@ -4,9 +4,10 @@ from __future__ import annotations
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -29,7 +30,10 @@ SERVICE_CLEAR = "clear"
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """WebSocket commands and the clear service exist once, whatever the entry state."""
+    """WebSocket commands and the clear service exist once, whatever the entry state.
+
+    Clearing deletes every user's history, so the service is admin only.
+    """
     websocket.async_register(hass)
 
     async def clear(call: ServiceCall) -> None:
@@ -40,8 +44,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         await manager.store.async_save()
         async_dispatcher_send(hass, SIGNAL_UPDATED, None)
 
-    hass.services.async_register(
-        DOMAIN, SERVICE_CLEAR, clear, schema=vol.Schema({vol.Optional("target"): cv.string})
+    async_register_admin_service(
+        hass, DOMAIN, SERVICE_CLEAR, clear, schema=vol.Schema({vol.Optional("target"): cv.string})
     )
     return True
 

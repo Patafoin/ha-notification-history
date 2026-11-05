@@ -5,32 +5,41 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.util import slugify
 
 from .const import EXCLUDED_PLATFORMS, EXCLUDED_SERVICES
 
 NOTIFY_SERVICES = "notify_services"  # hass.data key of notify/legacy.py (a HassKey, i.e. a str)
 
 
-def _legacy_index(hass: HomeAssistant) -> dict[str, tuple[str, Any]]:
-    """service name -> (platform, registered target value) for legacy notify services."""
-    index: dict[str, tuple[str, Any]] = {}
+def _legacy_index(hass: HomeAssistant) -> dict[str, str]:
+    """service name -> platform for legacy notify services (target values are never read)."""
+    index: dict[str, str] = {}
     for platform, services in (hass.data.get(NOTIFY_SERVICES) or {}).items():
         for service in services:
             if name := getattr(service, "_service_name", None):
-                index[name] = (platform, None)
-            for target_name, value in (getattr(service, "registered_targets", None) or {}).items():
-                index[target_name] = (platform, value)
+                index[name] = platform
+            for target_name in getattr(service, "registered_targets", None) or {}:
+                index[target_name] = platform
     return index
 
 
-def _mobile_app_entry(hass: HomeAssistant, *, webhook_id: str | None = None, entry_id: str | None = None):
+def _mobile_app_entry(hass: HomeAssistant, *, service: str | None = None, entry_id: str | None = None):
+    """The mobile_app entry behind an entity, or behind a legacy service.
+
+    mobile_app names its legacy services `mobile_app_<slug of the device name>`
+    (notify/legacy.py), so the device name is enough: the entry's webhook id is
+    a secret of mobile_app and is never looked at.
+    """
     for entry in hass.config_entries.async_entries("mobile_app"):
-        if entry.entry_id == entry_id or (webhook_id and entry.data.get("webhook_id") == webhook_id):
+        if entry.entry_id == entry_id:
+            return entry
+        if service and (device_name := entry.data.get("device_name")) and service == slugify(f"mobile_app_{device_name}"):
             return entry
     return None
 
 
-def resolve(hass: HomeAssistant, target: str, index: dict[str, tuple[str, Any]] | None = None) -> dict[str, Any]:
+def resolve(hass: HomeAssistant, target: str, index: dict[str, str] | None = None) -> dict[str, Any]:
     """{target, name, platform, device_id, owner, excluded} for a target."""
     index = _legacy_index(hass) if index is None else index
     service = target.removeprefix("notify.")
@@ -38,9 +47,9 @@ def resolve(hass: HomeAssistant, target: str, index: dict[str, tuple[str, Any]] 
     entry = None
 
     if service in index:
-        info["platform"], value = index[service]
-        if info["platform"] == "mobile_app" and isinstance(value, str):
-            entry = _mobile_app_entry(hass, webhook_id=value)
+        info["platform"] = index[service]
+        if info["platform"] == "mobile_app":
+            entry = _mobile_app_entry(hass, service=service)
     elif ent := er.async_get(hass).async_get(target):
         info["platform"] = ent.platform
         info["device_id"] = ent.device_id

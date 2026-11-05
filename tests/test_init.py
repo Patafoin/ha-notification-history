@@ -8,9 +8,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUs
 
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import Context, HomeAssistant
+from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from custom_components.notification_history.const import DOMAIN
+from custom_components.notification_history.targets import resolve
 
 PHONE_OWNER = "owner-user-id"
 
@@ -207,3 +209,22 @@ async def test_clear_service_and_unload(hass: HomeAssistant, loaded, hass_ws_cli
     await hass.async_block_till_done()
     await client.send_json_auto_id({"type": f"{DOMAIN}/list"})
     assert (await client.receive_json())["error"]["code"] == "not_loaded"
+
+
+async def test_clear_service_is_admin_only(hass: HomeAssistant, loaded, hass_read_only_user: MockUser) -> None:
+    with pytest.raises(Unauthorized):
+        await hass.services.async_call(DOMAIN, "clear", {}, blocking=True, context=Context(user_id=hass_read_only_user.id))
+
+
+async def test_legacy_mobile_app_service_resolved_from_device_name(hass: HomeAssistant) -> None:
+    """notify.mobile_app_<slug of the device name> is matched without reading the webhook id."""
+    entry = MockConfigEntry(
+        domain="mobile_app",
+        title="Pixel de Lou",
+        data={"user_id": PHONE_OWNER, "device_id": "pixel-id", "device_name": "Pixel de Lou"},
+    )
+    entry.add_to_hass(hass)
+    hass.data["notify_services"] = {"mobile_app": [FakeLegacyService("mobile_app", {"mobile_app_pixel_de_lou": "secret"})]}
+    device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, identifiers={("mobile_app", "pixel-id")})
+    info = resolve(hass, "notify.mobile_app_pixel_de_lou")
+    assert (info["platform"], info["owner"], info["name"], info["device_id"]) == ("mobile_app", PHONE_OWNER, "Pixel de Lou", device.id)
