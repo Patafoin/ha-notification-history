@@ -26,9 +26,9 @@ Not recorded: Companion app commands (`command_webview`, `clear_badge`…), and 
 
 ## Installation
 
-### HACS (custom repository)
+### Marketplace (HACS) — custom repository
 
-1. HACS → ⋮ → *Custom repositories* → add `https://github.com/Patafoin/ha-notification-history`, category *Integration*.
+1. Settings → **Marketplace**, **Add from link** → `https://github.com/Patafoin/ha-notification-history`. Before Home Assistant 2026.11: HACS → ⋮ → *Custom repositories* → the same URL, category *Integration*.
 2. Install **Notification History**, then restart Home Assistant.
 3. *Settings → Devices & services → Add integration → Notification History*.
 

@@ -26,9 +26,9 @@ Non enregistrés : les commandes de l'app Companion (`command_webview`, `clear_b
 
 ## Installation
 
-### HACS (dépôt personnalisé)
+### Marketplace (HACS) — dépôt personnalisé
 
-1. HACS → ⋮ → *Dépôts personnalisés* → ajouter `https://github.com/Patafoin/ha-notification-history`, catégorie *Intégration*.
+1. Paramètres → **Marketplace**, ajout depuis un lien → `https://github.com/Patafoin/ha-notification-history`. Avant Home Assistant 2026.11 : HACS → ⋮ → *Dépôts personnalisés* → la même URL, catégorie *Intégration*.
 2. Installer **Notification History**, puis redémarrer Home Assistant.
 3. *Paramètres → Appareils et services → Ajouter une intégration → Notification History*.
 
