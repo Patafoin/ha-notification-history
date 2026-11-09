@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.1.0";
+const CARD_VERSION = "0.1.1";
 
 const I18N = {
   en: {
@@ -164,19 +164,31 @@ class NotificationHistoryCard extends HTMLElement {
     this._render();
   }
 
-  // Absolute URLs pointing at this Home Assistant become relative, so they work
-  // both at home and away with the current session.
+  // URLs come from notify service calls, which any user or automation can make:
+  // only http(s) is kept (null otherwise, so no javascript: or data: links).
+  // Absolute URLs pointing at this Home Assistant become a same-origin path
+  // starting with a single "/", so they work both at home and away with the
+  // current session.
   _local(u) {
-    if (!u) return u;
+    if (!u || typeof u !== "string") return null;
+    let url;
     try {
-      const url = new URL(u, window.location.origin);
-      const own = [window.location.origin, this._hass?.config?.external_url, this._hass?.config?.internal_url]
-        .filter(Boolean)
-        .map((o) => new URL(o).origin);
-      return own.includes(url.origin) ? url.pathname + url.search + url.hash : u;
+      url = new URL(u, window.location.origin);
     } catch (e) {
-      return u;
+      return null;
     }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const own = [window.location.origin, this._hass?.config?.external_url, this._hass?.config?.internal_url]
+      .filter(Boolean)
+      .map((o) => {
+        try {
+          return new URL(o).origin;
+        } catch (e) {
+          return null;
+        }
+      });
+    if (!own.includes(url.origin)) return url.href;
+    return url.pathname.replace(/^\/+/, "/") + url.search + url.hash;
   }
 
   _icon(n) {
@@ -203,6 +215,8 @@ class NotificationHistoryCard extends HTMLElement {
     const out = [];
     const seen = new Set();
     const add = (b) => {
+      // A link whose URL was rejected by _local() gets no button.
+      if ("url" in b && !b.url) return;
       const key = b.url || `action:${b.action}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -212,7 +226,7 @@ class NotificationHistoryCard extends HTMLElement {
     if (n.link) add({ url: this._local(n.link), label: /\.(mp4|webm|mov)(\?|$)/.test(n.link) ? t.clip : t.open, icon: "mdi:open-in-app" });
     if (n.video) add({ url: this._local(n.video), label: t.clip, icon: "mdi:play-circle-outline" });
     if (n.audio) add({ url: this._local(n.audio), label: t.play, icon: "mdi:play" });
-    if (this._config.frigate && FRIGATE_RE.test(n.image || "")) {
+    if (this._config.frigate && FRIGATE_RE.test(n.image || "") && this._local(n.image)) {
       add({ url: this._local(n.image).replace(/(thumbnail|snapshot)\.(jpg|png|webp).*$/, "clip.mp4"), label: t.clip, icon: "mdi:play-circle-outline" });
     }
     for (const a of n.actions || []) {
@@ -251,6 +265,7 @@ class NotificationHistoryCard extends HTMLElement {
             .join("");
           const status = this._status(n);
           const head = n.title || n.message || "";
+          const img = this._local(n.image);
           return `<div class="item${n.status === "replaced" || n.status === "removed" ? " dim" : ""}">
             <div class="head">
               <ha-icon icon="${this._icon(n)}"></ha-icon>
@@ -261,7 +276,7 @@ class NotificationHistoryCard extends HTMLElement {
               ${status ? `<span class="status">${esc(status)}</span>` : ""}
             </div>
             ${n.title && n.message ? `<div class="msg">${esc(n.message).replace(/\n/g, "<br>")}</div>` : ""}
-            ${n.image ? `<img class="img" loading="lazy" src="${esc(this._local(n.image))}" alt="">` : ""}
+            ${img ? `<img class="img" loading="lazy" src="${esc(img)}" alt="">` : ""}
             ${btns ? `<div class="btns">${btns}</div>` : ""}
           </div>`;
         })
@@ -334,7 +349,7 @@ class NotificationHistoryCard extends HTMLElement {
     if (b.url) {
       if (/\.(mp4|webm|mov)(\?|$)/.test(b.url)) this._overlay(`<video src="${esc(b.url)}" controls autoplay playsinline></video>`);
       else if (/\.(mp3|m4a|wav|aac)(\?|$)/.test(b.url)) this._overlay(`<audio src="${esc(b.url)}" controls autoplay></audio>`);
-      else if (b.url.startsWith("/")) {
+      else if (b.url.startsWith("/") && !b.url.startsWith("//")) {
         window.history.pushState(null, "", b.url);
         window.dispatchEvent(new CustomEvent("location-changed"));
       } else window.open(b.url, "_blank", "noopener");
