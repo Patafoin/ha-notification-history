@@ -1,5 +1,7 @@
 """normalize_call on real payloads (anonymised) from ha-server and the Companion docs."""
-from custom_components.notification_history.normalize import is_command, normalize_call
+from datetime import UTC, datetime
+
+from custom_components.notification_history.normalize import is_command, normalize_call, persistent_record
 
 FRIGATE = {
     "title": "Mouvement detecte",
@@ -87,3 +89,16 @@ def test_clear_notification_with_tag_is_a_removal() -> None:
 
 def test_empty_message_ignored() -> None:
     assert call("mobile_app_phone", {}) == ([], [])
+
+
+def test_persistent_record() -> None:
+    created = datetime(2026, 11, 14, 9, 30, tzinfo=UTC)
+    record = persistent_record(
+        {"notification_id": "config_entry_discovery", "title": "New devices discovered", "message": "We have discovered new devices", "created_at": created},
+        now=0,
+    )
+    assert record["target"] == "persistent_notification" and record["owner"] is None
+    assert record["tag"] == "config_entry_discovery" and record["ts"] == created.timestamp()
+    assert record["id"] == f"persistent_notification:config_entry_discovery:{created.timestamp():.6f}"
+    assert record["title"] == "New devices discovered" and record["status"] == "sent"
+    assert persistent_record({"notification_id": "x", "message": " ", "title": None}, now=0) is None

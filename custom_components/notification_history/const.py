@@ -7,6 +7,7 @@ CONF_TARGETS = "targets"
 CONF_MAX_DAYS = "max_days"
 CONF_MAX_COUNT = "max_count"
 CONF_LOGBOOK = "logbook"
+CONF_PERSISTENT = "persistent_notifications"
 
 DEFAULT_MAX_DAYS = 90
 DEFAULT_MAX_COUNT = 500
@@ -15,6 +16,11 @@ DEFAULT_MAX_COUNT = 500
 # receives, so never recorded. persistent_notification has its own panel in HA.
 EXCLUDED_PLATFORMS = frozenset({"file", "syslog", "persistent_notification"})
 EXCLUDED_SERVICES = frozenset({"persistent_notification"})
+
+# Optional: persistent notifications are followed directly (most of them are
+# created in Python, not by a notify call), as this pseudo target. Only admins see them.
+PERSISTENT_TARGET = "persistent_notification"
+PERSISTENT_NAME = "Persistent notification"
 
 # Companion app command messages (iOS and Android): they drive the app, they are
 # not shown to anyone. See companion.home-assistant.io/docs/notifications/notification-commands

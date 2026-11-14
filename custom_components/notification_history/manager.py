@@ -4,8 +4,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import timedelta
 import logging
+import time
 from typing import Any
 
+from homeassistant.components import persistent_notification
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -15,6 +17,7 @@ from .backfill import async_fetch_past
 from .const import (
     EVENT_ACTION,
     EVENT_CLEARED,
+    PERSISTENT_TARGET,
     SIGNAL_UPDATED,
     STATUS_ACTION,
     STATUS_CLEARED,
@@ -22,7 +25,7 @@ from .const import (
     STATUS_REPLACED,
     STATUS_SENT,
 )
-from .normalize import normalize_call
+from .normalize import normalize_call, persistent_record
 from .store import HistoryStore
 from .targets import _legacy_index, resolve
 
@@ -41,11 +44,13 @@ class HistoryManager:
         store: HistoryStore,
         targets: list[str],
         logbook: bool,
+        persistent: bool = False,
     ) -> None:
         self.hass = hass
         self.store = store
         self.targets = set(targets)  # empty: every target that is not excluded
         self.logbook = logbook
+        self.persistent = persistent
         self._unsubs: list[Callable[[], None]] = []
 
     # --- lifecycle -------------------------------------------------------
@@ -59,6 +64,8 @@ class HistoryManager:
         self._unsubs.append(hass.bus.async_listen(EVENT_CALL_SERVICE, self._on_call, self._is_notify))
         self._unsubs.append(hass.bus.async_listen(EVENT_ACTION, self._on_action))
         self._unsubs.append(hass.bus.async_listen(EVENT_CLEARED, self._on_cleared))
+        if self.persistent:
+            self._unsubs.append(persistent_notification.async_register_callback(hass, self._on_persistent))
         self._unsubs.append(async_track_time_interval(hass, self._purge, timedelta(hours=1)))
         if not self.store.backfilled:
             if hass.state is CoreState.running:
@@ -79,6 +86,8 @@ class HistoryManager:
         index = _legacy_index(self.hass)
         infos = {t: resolve(self.hass, t, index) for t in {r["target"] for r in self.store.records}}
         for record in self.store.records:
+            if record["target"] == PERSISTENT_TARGET:
+                continue
             info = infos[record["target"]]
             record["target_name"] = info["name"]
             if info["device_id"] is not None:
@@ -213,6 +222,28 @@ class HistoryManager:
                 {"name": record["target_name"], "message": text, "entity_id": record["target"]},
             )
         )
+
+    # --- persistent notifications ----------------------------------------
+
+    @callback
+    def _on_persistent(self, update_type: str, notifications: dict[str, Any]) -> None:
+        """Created, updated or dismissed in HA (most never go through a notify call)."""
+        now = time.time()
+        changed: list[dict[str, Any]] = []
+        if update_type == persistent_notification.UpdateType.REMOVED:
+            for notification_id in notifications:
+                record = self.store.latest(PERSISTENT_TARGET, notification_id, now - MATCH_WINDOW)
+                if record is not None and record["status"] == STATUS_SENT:
+                    record["status"] = STATUS_CLEARED
+                    changed.append(record)
+        else:
+            for notification in notifications.values():
+                if (record := persistent_record(notification, now)) is not None:
+                    changed.extend(self.store.add(record))
+        if changed:
+            self.store.schedule_save()
+            for record in changed:
+                async_dispatcher_send(self.hass, SIGNAL_UPDATED, record)
 
     # --- Companion app events ---------------------------------------------
 

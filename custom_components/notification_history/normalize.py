@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .const import COMMAND_MESSAGES, COMMAND_PREFIXES, STATUS_SENT
+from .const import COMMAND_MESSAGES, COMMAND_PREFIXES, PERSISTENT_NAME, PERSISTENT_TARGET, STATUS_SENT
 
 VIDEO_EXT = (".mp4", ".mov", ".m4v", ".webm")
 AUDIO_EXT = (".mp3", ".m4a", ".wav", ".aac", ".caf")
@@ -113,3 +113,39 @@ def normalize_call(
     }
     records = [{**base, "id": f"{context_id}:{target}", "target": target} for target in targets]
     return records, []
+
+
+def persistent_record(notification: dict[str, Any], now: float) -> dict[str, Any] | None:
+    """History record for a persistent notification (created or updated).
+
+    The notification id is the tag, so creating it again replaces the previous
+    record; the id includes created_at so the same notification is only added once.
+    """
+    notification_id = _str(notification.get("notification_id"))
+    message = _str(notification.get("message"))
+    title = _str(notification.get("title"))
+    if notification_id is None or (message is None and title is None):
+        return None
+    created_at = notification.get("created_at")
+    ts = created_at.timestamp() if hasattr(created_at, "timestamp") else now
+    return {
+        "id": f"{PERSISTENT_TARGET}:{notification_id}:{ts:.6f}",
+        "ts": round(ts, 6),
+        "target": PERSISTENT_TARGET,
+        "target_name": PERSISTENT_NAME,
+        "device_id": None,
+        "owner": None,
+        "title": title,
+        "message": message,
+        "image": None,
+        "video": None,
+        "audio": None,
+        "link": None,
+        "actions": [],
+        "tag": notification_id,
+        "group": None,
+        "sub_targets": [],
+        "context_id": None,
+        "sent_by": None,
+        "status": STATUS_SENT,
+    }

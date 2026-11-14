@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser, async_capture_events
 
+from homeassistant.components import persistent_notification
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import Unauthorized
@@ -195,6 +196,49 @@ async def test_selected_targets_only(hass: HomeAssistant, phone, hass_ws_client)
     await hass.async_block_till_done()
     client = await hass_ws_client(hass)
     assert [n["message"] for n in (await ws_list(client))["notifications"]] == ["keep"]
+
+
+async def test_persistent_notifications(hass: HomeAssistant, phone, hass_ws_client) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={},
+        options={"targets": [], "max_days": 90, "max_count": 500, "logbook": False, "persistent_notifications": True},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    persistent_notification.async_create(hass, "Login attempt failed", "Login attempt", "http-login")
+    persistent_notification.async_create(hass, "Second attempt", "Login attempt", "http-login")
+    persistent_notification.async_create(hass, "We found a device", "Discovered", "discovery")
+    # A notify call to persistent_notification is not recorded twice.
+    fire_notify(hass, "persistent_notification", {"message": "via notify"})
+    await hass.async_block_till_done()
+    persistent_notification.async_dismiss(hass, "discovery")
+    await hass.async_block_till_done()
+
+    client = await hass_ws_client(hass)
+    items = (await ws_list(client))["notifications"]
+    assert [(n["message"], n["status"]) for n in items] == [
+        ("We found a device", "cleared"),
+        ("Second attempt", "sent"),
+        ("Login attempt failed", "replaced"),
+    ]
+    assert {n["target"] for n in items} == {"persistent_notification"}
+    assert items[0]["target_name"] == "Persistent notification"
+
+    # Only admins see them.
+    user = MockUser(id=PHONE_OWNER).add_to_hass(hass)
+    token = hass.auth.async_create_access_token(await hass.auth.async_create_refresh_token(user, "https://example.com"))
+    client = await hass_ws_client(hass, access_token=token)
+    assert (await ws_list(client))["notifications"] == []
+
+
+async def test_persistent_notifications_off_by_default(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    persistent_notification.async_create(hass, "Not recorded", "Title", "some-id")
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    assert (await ws_list(client))["notifications"] == []
 
 
 async def test_clear_service_and_unload(hass: HomeAssistant, loaded, hass_ws_client) -> None:

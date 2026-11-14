@@ -14,6 +14,7 @@ from .const import (
     CONF_LOGBOOK,
     CONF_MAX_COUNT,
     CONF_MAX_DAYS,
+    CONF_PERSISTENT,
     CONF_TARGETS,
     DEFAULT_MAX_COUNT,
     DEFAULT_MAX_DAYS,
@@ -59,7 +60,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await store.async_load()
     store.purge()
-    manager = HistoryManager(hass, store, list(options.get(CONF_TARGETS, [])), bool(options.get(CONF_LOGBOOK)))
+    manager = HistoryManager(
+        hass,
+        store,
+        list(options.get(CONF_TARGETS, [])),
+        bool(options.get(CONF_LOGBOOK)),
+        bool(options.get(CONF_PERSISTENT)),
+    )
     hass.data[DOMAIN] = manager
     await manager.async_start()
     await async_register_frontend(hass)

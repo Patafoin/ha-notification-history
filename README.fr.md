@@ -21,7 +21,7 @@ Une notification touchée ou effacée disparaît du téléphone, et Home Assista
 - **Par utilisateur** : un administrateur voit tout ; les autres utilisateurs ne voient que les appareils enregistrés avec leur compte.
 - **Frigate** : un bouton « Voir le clip » pour les images envoyées par le proxy de notification de l'intégration Frigate.
 
-Non enregistrés : les commandes de l'app Companion (`command_webview`, `clear_badge`…) et les cibles qui écrivent dans un journal ou un fichier (`file`, `syslog`, `persistent_notification`, qui a son propre panneau).
+Non enregistrés : les commandes de l'app Companion (`command_webview`, `clear_badge`…) et les cibles qui écrivent dans un journal ou un fichier (`file`, `syslog`, `persistent_notification`, qui a son propre panneau ; voir l'option Notifications persistantes ci-dessous).
 
 ## Prérequis
 
@@ -51,6 +51,7 @@ Copier `custom_components/notification_history` dans `config/custom_components/`
 | Conserver pendant | 90 jours | |
 | Conserver au plus | 500 notifications | |
 | Journal | non | Écrit aussi « titre — message » dans le journal. |
+| Notifications persistantes | non | Enregistre aussi les notifications de la barre latérale de HA (découvertes, connexions échouées, réparations…), y compris celles qui ne passent pas par un appel notify, et les marque effacées quand elles sont fermées. Visibles uniquement par les administrateurs. |
 
 L'historique est stocké dans `.storage/notification_history`. Supprimer l'intégration le supprime.
 

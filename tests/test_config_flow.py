@@ -13,7 +13,13 @@ async def test_user_flow_then_single_instance(hass: HomeAssistant) -> None:
         result["flow_id"], {"targets": [], "max_days": 30, "max_count": 200, "logbook": True}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["options"] == {"targets": [], "max_days": 30, "max_count": 200, "logbook": True}
+    assert result["options"] == {
+        "targets": [],
+        "max_days": 30,
+        "max_count": 200,
+        "logbook": True,
+        "persistent_notifications": False,
+    }
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     assert result["type"] is FlowResultType.ABORT and result["reason"] == "single_instance_allowed"
 
@@ -29,3 +35,4 @@ async def test_options_flow(hass: HomeAssistant, config_entry) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
     assert config_entry.options["max_days"] == 10
+    assert config_entry.options["persistent_notifications"] is False

@@ -21,7 +21,7 @@ A notification you tap or swipe away is gone from your phone, and Home Assistant
 - **Per-user**: an admin sees everything; other users only see the devices registered with their account.
 - **Frigate**: a “Watch clip” button for snapshots sent through the Frigate integration's notification proxy.
 
-Not recorded: Companion app commands (`command_webview`, `clear_badge`…), and targets that write to a log or a file (`file`, `syslog`, `persistent_notification`, which has its own panel).
+Not recorded: Companion app commands (`command_webview`, `clear_badge`…), and targets that write to a log or a file (`file`, `syslog`, `persistent_notification`, which has its own panel; see the Persistent notifications option below).
 
 ## Requirements
 
@@ -51,6 +51,7 @@ Copy `custom_components/notification_history` into your `config/custom_component
 | Keep for | 90 days | |
 | Keep at most | 500 notifications | |
 | Logbook | off | Also writes “title — message” to the logbook. |
+| Persistent notifications | off | Also records the notifications shown in the HA sidebar (discovery, failed logins, repairs…), including the ones not created by a notify call, and marks them cleared when dismissed. Only admins see them. |
 
 The history is stored in `.storage/notification_history`. Deleting the integration deletes it.
 
