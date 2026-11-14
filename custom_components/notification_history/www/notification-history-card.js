@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.1.1";
+const CARD_VERSION = "0.1.2";
 
 const I18N = {
   en: {
@@ -23,7 +23,9 @@ const I18N = {
     f_title: "Title",
     f_limit: "Notifications shown before “Show more”",
     f_targets: "Targets (empty: all)",
+    f_channels: "Channels (empty: all)",
     f_show_target: "Show the target name",
+    f_show_channel: "Show the channel name",
     f_frigate: "“Watch clip” button for Frigate snapshots",
   },
   fr: {
@@ -44,7 +46,9 @@ const I18N = {
     f_title: "Titre",
     f_limit: "Notifications affichées avant « Voir plus »",
     f_targets: "Cibles (vide : toutes)",
+    f_channels: "Canaux (vide : tous)",
     f_show_target: "Afficher le nom de la cible",
+    f_show_channel: "Afficher le nom du canal",
     f_frigate: "Bouton « Voir le clip » pour les images Frigate",
   },
 };
@@ -52,18 +56,19 @@ const I18N = {
 const FRIGATE_RE = /\/api\/frigate\/(?:[^/]+\/)?notifications\/([^/]+)\/(?:thumbnail|snapshot)\.(?:jpg|png|webp)/;
 
 const esc = (s) =>
-  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 class NotificationHistoryCard extends HTMLElement {
   static getConfigForm() {
-    // Labels follow the language of the user editing the card.
     const t = (k) => (I18N[(document.querySelector("home-assistant")?.hass?.locale?.language || "en").slice(0, 2)] || I18N.en)[k];
     return {
       schema: [
         { name: "title", selector: { text: {} } },
         { name: "limit", selector: { number: { min: 1, max: 200, mode: "box" } } },
         { name: "targets", selector: { text: { multiple: true } } },
+        { name: "channels", selector: { text: { multiple: true } } },
         { name: "show_target", selector: { boolean: {} } },
+        { name: "show_channel", selector: { boolean: {} } },
         { name: "frigate", selector: { boolean: {} } },
       ],
       computeLabel: (s) => t(`f_${s.name}`),
@@ -75,7 +80,7 @@ class NotificationHistoryCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { limit: 15, show_target: true, frigate: true, ...config };
+    this._config = { limit: 15, show_target: true, show_channel: false, frigate: true, ...config };
     this._items = null;
     this._more = false;
     this._error = null;
@@ -91,7 +96,6 @@ class NotificationHistoryCard extends HTMLElement {
 
   connectedCallback() {
     if (this._hass && !this._unsub) this._resubscribe();
-    // Refresh relative dates once a minute.
     this._timer = setInterval(() => this._items && this._render(), 60000);
   }
 
@@ -112,6 +116,7 @@ class NotificationHistoryCard extends HTMLElement {
     const f = {};
     if (Array.isArray(this._config.targets) && this._config.targets.length) f.targets = this._config.targets;
     if (Array.isArray(this._config.devices) && this._config.devices.length) f.devices = this._config.devices;
+    if (Array.isArray(this._config.channels) && this._config.channels.length) f.channels = this._config.channels;
     return f;
   }
 
@@ -143,7 +148,7 @@ class NotificationHistoryCard extends HTMLElement {
         type: "notification_history/list",
         limit: beforeId ? 50 : this._config.limit,
         ...(beforeId ? { before_id: beforeId } : {}),
-        ...this._filters(),
+                                          ...this._filters(),
       });
       this._error = null;
       this._items = beforeId ? [...(this._items || []), ...res.notifications] : res.notifications;
@@ -164,11 +169,6 @@ class NotificationHistoryCard extends HTMLElement {
     this._render();
   }
 
-  // URLs come from notify service calls, which any user or automation can make:
-  // only http(s) is kept (null otherwise, so no javascript: or data: links).
-  // Absolute URLs pointing at this Home Assistant become a same-origin path
-  // starting with a single "/", so they work both at home and away with the
-  // current session.
   _local(u) {
     if (!u || typeof u !== "string") return null;
     let url;
@@ -179,14 +179,14 @@ class NotificationHistoryCard extends HTMLElement {
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     const own = [window.location.origin, this._hass?.config?.external_url, this._hass?.config?.internal_url]
-      .filter(Boolean)
-      .map((o) => {
-        try {
-          return new URL(o).origin;
-        } catch (e) {
-          return null;
-        }
-      });
+    .filter(Boolean)
+    .map((o) => {
+      try {
+        return new URL(o).origin;
+      } catch (e) {
+        return null;
+      }
+    });
     if (!own.includes(url.origin)) return url.href;
     return url.pathname.replace(/^\/+/, "/") + url.search + url.hash;
   }
@@ -215,7 +215,6 @@ class NotificationHistoryCard extends HTMLElement {
     const out = [];
     const seen = new Set();
     const add = (b) => {
-      // A link whose URL was rejected by _local() gets no button.
       if ("url" in b && !b.url) return;
       const key = b.url || `action:${b.action}`;
       if (!seen.has(key)) {
@@ -256,79 +255,46 @@ class NotificationHistoryCard extends HTMLElement {
       body = `<div class="empty">${t.empty}</div>`;
     } else {
       body = this._items
-        .map((n) => {
-          const btns = this._buttons(n)
-            .map((b) => {
-              this._btns.push(b);
-              return `<button class="btn" data-b="${this._btns.length - 1}"><ha-icon icon="${b.icon}"></ha-icon>${esc(b.label)}</button>`;
-            })
-            .join("");
-          const status = this._status(n);
-          const head = n.title || n.message || "";
-          const img = this._local(n.image);
-          return `<div class="item${n.status === "replaced" || n.status === "removed" ? " dim" : ""}">
-            <div class="head">
-              <ha-icon icon="${this._icon(n)}"></ha-icon>
-              <div class="txt">
-                <div class="title">${esc(head)}</div>
-                <div class="meta">${esc(this._when(n.ts))}${this._config.show_target ? ` · ${esc(n.target_name || n.target)}` : ""}</div>
-              </div>
-              ${status ? `<span class="status">${esc(status)}</span>` : ""}
-            </div>
-            ${n.title && n.message ? `<div class="msg">${esc(n.message).replace(/\n/g, "<br>")}</div>` : ""}
-            ${img ? `<img class="img" loading="lazy" src="${esc(img)}" alt="">` : ""}
-            ${btns ? `<div class="btns">${btns}</div>` : ""}
-          </div>`;
+      .map((n) => {
+        const btns = this._buttons(n)
+        .map((b) => {
+          this._btns.push(b);
+          return `<button class="btn" data-b="${this._btns.length - 1}"><ha-icon icon="${b.icon}"></ha-icon>${esc(b.label)}</button>`;
         })
         .join("");
-      if (this._more) body += `<button class="btn more" data-more>${t.more}</button>`;
+        const status = this._status(n);
+        const head = n.title || n.message || "";
+        const img = this._local(n.image);
+        const metaParts = [
+          esc(this._when(n.ts)),
+           this._config.show_target ? esc(n.target_name || n.target) : "",
+           this._config.show_channel && n.channel ? esc(n.channel) : "",
+        ].filter(Boolean);
+        return `<div class="item${n.status === "replaced" || n.status === "removed" ? " dim" : ""}">
+        <div class="head">
+        <ha-icon icon="${this._icon(n)}"></ha-icon>
+        <div class="txt">
+        <div class="title">${esc(head)}</div>
+        Use code with caution.
+        ${metaParts.join(" · ")}
+
+        ${status ? <span class="status">${esc(status)}</span> : ""}
+
+        ${n.title && n.message ? <div class="msg">${esc(n.message).replace(/\n/g, "<br>")}</div> : ""}
+        ${img ? <img class="img" loading="lazy" src="${esc(img)}" alt=""> : ""}
+        ${btns ? <div class="btns">${btns}</div> : ""}
+        ; }) .join(""); if (this._more) body += ${t.more}`;
     }
-
-    this.shadowRoot.innerHTML = `<style>
-        ha-card { padding: 12px; }
-        .title-card { font-size: 20px; font-weight: 500; padding: 4px 4px 12px; color: var(--primary-text-color); }
-        .list { display: flex; flex-direction: column; gap: 8px; }
-        .item { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--divider-color);
-                display: flex; flex-direction: column; gap: 8px; }
-        .item.dim { opacity: 0.6; }
-        .head { display: flex; align-items: center; gap: 12px; }
-        .head ha-icon { --mdc-icon-size: 22px; color: var(--state-icon-color, var(--primary-color)); flex: none; }
-        .txt { flex: 1; min-width: 0; }
-        .title { font-size: 15px; font-weight: 600; color: var(--primary-text-color); overflow-wrap: anywhere; }
-        .meta { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
-        .status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; flex: none;
-                  color: var(--secondary-text-color); border: 1px solid var(--divider-color); }
-        .msg { font-size: 14px; color: var(--primary-text-color); line-height: 1.4; overflow-wrap: anywhere; }
-        .img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; cursor: zoom-in;
-               background: var(--secondary-background-color); }
-        .img.ko { display: none; }
-        .btns { display: flex; flex-wrap: wrap; gap: 8px; }
-        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
-               border: 1px solid var(--divider-color); background: var(--secondary-background-color);
-               color: var(--primary-text-color); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-        .btn ha-icon { --mdc-icon-size: 18px; color: var(--primary-color); }
-        .more { align-self: center; }
-        .empty { padding: 16px; text-align: center; color: var(--secondary-text-color); }
-        .overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0, 0, 0, 0.88); display: flex;
-                   align-items: center; justify-content: center; padding: 16px; }
-        .overlay img, .overlay video { max-width: 100%; max-height: 100%; border-radius: 10px; }
-      </style>
-      <ha-card>
-        ${this._config.title ? `<div class="title-card">${esc(this._config.title)}</div>` : ""}
-        <div class="list">${body}</div>
-      </ha-card>`;
-
+    this.shadowRoot.innerHTML = <style> ha-card { padding: 12px; } .title-card { font-size: 20px; font-weight: 500; padding: 4px 4px 12px; color: var(--primary-text-color); } .list { display: flex; flex-direction: column; gap: 8px; } .item { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--divider-color); display: flex; flex-direction: column; gap: 8px; } .item.dim { opacity: 0.6; } .head { display: flex; align-items: center; gap: 12px; } .head ha-icon { --mdc-icon-size: 22px; color: var(--state-icon-color, var(--primary-color)); flex: none; } .txt { flex: 1; min-width: 0; } .title { font-size: 15px; font-weight: 600; color: var(--primary-text-color); overflow-wrap: anywhere; } .meta { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; } .status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; flex: none; color: var(--secondary-text-color); border: 1px solid var(--divider-color); } .msg { font-size: 14px; color: var(--primary-text-color); line-height: 1.4; overflow-wrap: anywhere; } .img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; cursor: zoom-in; background: var(--secondary-background-color); } .img.ko { display: none; } .btns { display: flex; flex-wrap: wrap; gap: 8px; } .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; } .btn ha-icon { --mdc-icon-size: 18px; color: var(--primary-color); } .more { align-self: center; } .empty { padding: 16px; text-align: center; color: var(--secondary-text-color); } .overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0, 0, 0, 0.88); display: flex; align-items: center; justify-content: center; padding: 16px; } .overlay img, .overlay video { max-width: 100%; max-height: 100%; border-radius: 10px; } </style> <ha-card> ${this._config.title ? ${esc(this._config.title)} : ""} <div class="list">${body}</div> </ha-card>;
     const root = this.shadowRoot;
     root.querySelectorAll("img.img").forEach((im) => {
-      // Image gone (e.g. purged camera event): hide it rather than show a broken icon.
       im.addEventListener("error", () => im.classList.add("ko"));
-      im.addEventListener("click", () => this._overlay(`<img src="${esc(im.getAttribute("src"))}" alt="">`));
+      im.addEventListener("click", () => this._overlay(<img src="${esc(im.getAttribute("src"))}" alt="">));
     });
     root.querySelectorAll("button[data-b]").forEach((el) => el.addEventListener("click", () => this._run(this._btns[Number(el.dataset.b)])));
     const more = root.querySelector("[data-more]");
     if (more) more.addEventListener("click", () => this._load(this._items[this._items.length - 1].id));
   }
-
   _overlay(html) {
     const o = document.createElement("div");
     o.className = "overlay";
@@ -336,19 +302,17 @@ class NotificationHistoryCard extends HTMLElement {
     o.addEventListener("click", (e) => {
       if (e.target === o || e.target.tagName === "IMG") o.remove();
     });
-    this.shadowRoot.appendChild(o);
+      this.shadowRoot.appendChild(o);
   }
-
   _toast(message) {
     this.dispatchEvent(new CustomEvent("hass-notification", { detail: { message }, bubbles: true, composed: true }));
   }
-
   async _run(b) {
     if (!b) return;
     const t = this._t;
     if (b.url) {
-      if (/\.(mp4|webm|mov)(\?|$)/.test(b.url)) this._overlay(`<video src="${esc(b.url)}" controls autoplay playsinline></video>`);
-      else if (/\.(mp3|m4a|wav|aac)(\?|$)/.test(b.url)) this._overlay(`<audio src="${esc(b.url)}" controls autoplay></audio>`);
+      if (/.(mp4|webm|mov)(?|$)/.test(b.url)) this._overlay(<video src="${esc(b.url)}" controls autoplay playsinline></video>);
+      else if (/.(mp3|m4a|wav|aac)(?|$)/.test(b.url)) this._overlay(<audio src="${esc(b.url)}" controls autoplay></audio>);
       else if (b.url.startsWith("/") && !b.url.startsWith("//")) {
         window.history.pushState(null, "", b.url);
         window.dispatchEvent(new CustomEvent("location-changed"));
@@ -364,13 +328,12 @@ class NotificationHistoryCard extends HTMLElement {
     }
   }
 }
-
 customElements.define("notification-history-card", NotificationHistoryCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "notification-history-card",
   name: "Notification History",
   description: "Notifications sent by Home Assistant, with image, link and buttons.",
-  documentationURL: "https://github.com/Patafoin/ha-notification-history",
+  documentationURL: "github.com",
 });
-console.info(`%c NOTIFICATION-HISTORY-CARD %c ${CARD_VERSION} `, "background:#03a9f4;color:#fff", "");
+console.info(%c NOTIFICATION-HISTORY-CARD %c ${CARD_VERSION} , "background:#03a9f4;color:#fff", "");
