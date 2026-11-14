@@ -259,6 +259,30 @@ class NotificationHistoryCard extends HTMLElement {
     if (!old || !old.url) this._render();
   }
 
+  // http(s) URLs and markdown [text](url) links in a message become links.
+  // Each URL goes through _local(), like the buttons; a rejected one stays text.
+  _linkify(text) {
+    const re = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s<>"'\])]+/g;
+    let out = "";
+    let last = 0;
+    for (const m of text.matchAll(re)) {
+      let url = m[2] || m[0];
+      let label = m[1] || url;
+      let trail = "";
+      if (!m[2]) {
+        // Sentence punctuation after a bare URL is not part of it.
+        trail = (url.match(/[.,;:!?]+$/) || [""])[0];
+        if (trail) label = url = url.slice(0, -trail.length);
+      }
+      const safe = this._local(url);
+      out += esc(text.slice(last, m.index));
+      out += safe ? `<a href="${esc(safe)}" data-l target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : esc(label);
+      out += esc(trail);
+      last = m.index + m[0].length;
+    }
+    return (out + esc(text.slice(last))).replace(/\n/g, "<br>");
+  }
+
   _icon(n) {
     if (n.video || (this._config.frigate && FRIGATE_RE.test(n.image || ""))) return "mdi:cctv";
     if (n.image) return "mdi:image-outline";
@@ -352,7 +376,7 @@ class NotificationHistoryCard extends HTMLElement {
               </div>
               ${status ? `<span class="status">${esc(status)}</span>` : ""}
             </div>
-            ${n.title && n.message ? `<div class="msg">${esc(n.message).replace(/\n/g, "<br>")}</div>` : ""}
+            ${n.title && n.message ? `<div class="msg">${this._linkify(n.message)}</div>` : ""}
             ${img ? `<img class="img" loading="lazy" src="${esc(img)}" alt="">` : ""}
             ${btns ? `<div class="btns">${btns}</div>` : ""}
           </div>`;
@@ -376,6 +400,7 @@ class NotificationHistoryCard extends HTMLElement {
         .status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; flex: none;
                   color: var(--secondary-text-color); border: 1px solid var(--divider-color); }
         .msg { font-size: 14px; color: var(--primary-text-color); line-height: 1.4; overflow-wrap: anywhere; }
+        .msg a { color: var(--primary-color); }
         .img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; cursor: zoom-in;
                background: var(--secondary-background-color); }
         .img.ko { display: none; }
@@ -402,6 +427,13 @@ class NotificationHistoryCard extends HTMLElement {
       im.addEventListener("click", () => this._overlay(`<img src="${esc(im.getAttribute("src"))}" alt="">`));
     });
     root.querySelectorAll("button[data-b]").forEach((el) => el.addEventListener("click", () => this._run(this._btns[Number(el.dataset.b)])));
+    // Same handling as the link buttons (same-origin paths open in HA, not a new tab).
+    root.querySelectorAll("a[data-l]").forEach((el) =>
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        this._run({ url: el.getAttribute("href") });
+      })
+    );
     const more = root.querySelector("[data-more]");
     if (more) more.addEventListener("click", () => this._load(this._items[this._items.length - 1].id));
   }
