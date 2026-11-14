@@ -106,10 +106,12 @@ def normalize_call(
         "actions": _actions(data),
         "tag": _str(data.get("tag")),
         "group": _str(data.get("group")),
+        "channel": _str(data.get("channel")),
         "sub_targets": _as_list(service_data.get("target")),
         "context_id": context_id,
         "sent_by": user_id,
         "status": STATUS_SENT,
     }
+
     records = [{**base, "id": f"{context_id}:{target}", "target": target} for target in targets]
     return records, []
