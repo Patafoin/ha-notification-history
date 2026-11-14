@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser, async_capture_events
 
-from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import Context, CoreState, HomeAssistant
 from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -195,6 +195,22 @@ async def test_selected_targets_only(hass: HomeAssistant, phone, hass_ws_client)
     await hass.async_block_till_done()
     client = await hass_ws_client(hass)
     assert [n["message"] for n in (await ws_list(client))["notifications"]] == ["keep"]
+
+
+async def test_reload_after_started_logs_no_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, phone, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Set up before HA has started, then unload: no 'Unable to remove unknown job listener'."""
+    hass.set_state(CoreState.starting)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert "Unable to remove unknown job listener" not in caplog.text
 
 
 async def test_clear_service_and_unload(hass: HomeAssistant, loaded, hass_ws_client) -> None:
