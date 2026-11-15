@@ -4,8 +4,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import timedelta
 import logging
+import time
 from typing import Any
 
+from homeassistant.components.persistent_notification import (
+    Notification,
+    UpdateType,
+    async_register_callback,
+)
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -15,6 +21,7 @@ from .backfill import async_fetch_past
 from .const import (
     EVENT_ACTION,
     EVENT_CLEARED,
+    PERSISTENT_TARGET,
     SIGNAL_UPDATED,
     STATUS_ACTION,
     STATUS_CLEARED,
@@ -41,11 +48,13 @@ class HistoryManager:
         store: HistoryStore,
         targets: list[str],
         logbook: bool,
+        persistent: bool = False,
     ) -> None:
         self.hass = hass
         self.store = store
         self.targets = set(targets)  # empty: every target that is not excluded
         self.logbook = logbook
+        self.persistent = persistent
         self._unsubs: list[Callable[[], None]] = []
 
     # --- lifecycle -------------------------------------------------------
@@ -60,6 +69,8 @@ class HistoryManager:
         self._unsubs.append(hass.bus.async_listen(EVENT_ACTION, self._on_action))
         self._unsubs.append(hass.bus.async_listen(EVENT_CLEARED, self._on_cleared))
         self._unsubs.append(async_track_time_interval(hass, self._purge, timedelta(hours=1)))
+        if self.persistent:
+            self._unsubs.append(async_register_callback(hass, self._on_persistent))
         if not self.store.backfilled:
             if hass.state is CoreState.running:
                 hass.async_create_background_task(self.async_backfill(), "notification_history backfill")
@@ -77,8 +88,9 @@ class HistoryManager:
     def _refresh_names(self) -> None:
         """Names follow renamed devices and entities (they are stored for the WebSocket list)."""
         index = _legacy_index(self.hass)
-        infos = {t: resolve(self.hass, t, index) for t in {r["target"] for r in self.store.records}}
-        for record in self.store.records:
+        records = [r for r in self.store.records if r["target"] != PERSISTENT_TARGET]
+        infos = {t: resolve(self.hass, t, index) for t in {r["target"] for r in records}}
+        for record in records:
             info = infos[record["target"]]
             record["target_name"] = info["name"]
             if info["device_id"] is not None:
@@ -213,6 +225,55 @@ class HistoryManager:
                 {"name": record["target_name"], "message": text, "entity_id": record["target"]},
             )
         )
+
+    # --- persistent notifications (option) ---------------------------------
+
+    @callback
+    def _on_persistent(self, update_type: UpdateType, notifications: dict[str, Notification]) -> None:
+        """A notification was added to the sidebar bell, re-created with the same id, or dismissed.
+
+        Only what happens while the integration is loaded is seen: the bell is not read at startup.
+        """
+        changed: list[dict[str, Any]] = []
+        if update_type in (UpdateType.ADDED, UpdateType.UPDATED):
+            for notification_id, notification in notifications.items():
+                title, message = notification.get("title") or None, notification.get("message") or None
+                if title is None and message is None:
+                    continue
+                ts = round(notification["created_at"].timestamp(), 6)
+                record = {
+                    "id": f"{PERSISTENT_TARGET}:{notification_id}:{ts}",
+                    "ts": ts,
+                    "target": PERSISTENT_TARGET,
+                    "target_name": None,  # the card shows its own translated label
+                    "device_id": None,
+                    "owner": None,  # admins only, like the other targets without a device
+                    "title": title,
+                    "message": message,
+                    "image": None,
+                    "video": None,
+                    "audio": None,
+                    "link": None,
+                    "actions": [],
+                    # Re-creating a notification with the same id replaces it in the bell.
+                    "tag": notification_id,
+                    "group": None,
+                    "sub_targets": [],
+                    "context_id": None,
+                    "sent_by": None,
+                    "status": STATUS_SENT,
+                }
+                changed.extend(self.store.add(record))
+        elif update_type is UpdateType.REMOVED:
+            for notification_id in notifications:
+                record = self.store.latest(PERSISTENT_TARGET, notification_id, time.time() - MATCH_WINDOW)
+                if record is not None and record["status"] == STATUS_SENT:
+                    record["status"] = STATUS_CLEARED
+                    changed.append(record)
+        if changed:
+            self.store.schedule_save()
+            for record in changed:
+                async_dispatcher_send(self.hass, SIGNAL_UPDATED, record)
 
     # --- Companion app events ---------------------------------------------
 

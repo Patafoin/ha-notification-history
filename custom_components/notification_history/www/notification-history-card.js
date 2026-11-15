@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.1.1";
+const CARD_VERSION = "0.2.0";
 
 const I18N = {
   en: {
@@ -20,6 +20,7 @@ const I18N = {
     hour: (n) => `${n} h ago`,
     day: (n) => `${n} d ago`,
     status: { replaced: "Replaced", removed: "Removed by HA", cleared: "Dismissed", action: (t) => `Button: ${t}` },
+    persistent: "Persistent notification",
     f_title: "Title",
     f_limit: "Notifications shown before “Show more”",
     f_targets: "Targets (empty: all)",
@@ -41,6 +42,7 @@ const I18N = {
     hour: (n) => `il y a ${n} h`,
     day: (n) => `il y a ${n} j`,
     status: { replaced: "Remplacée", removed: "Retirée par HA", cleared: "Effacée", action: (t) => `Bouton : ${t}` },
+    persistent: "Notification persistante",
     f_title: "Titre",
     f_limit: "Notifications affichées avant « Voir plus »",
     f_targets: "Cibles (vide : toutes)",
@@ -237,6 +239,10 @@ class NotificationHistoryCard extends HTMLElement {
     return out;
   }
 
+  _targetName(n) {
+    return n.target === "persistent_notification" ? this._t.persistent : n.target_name || n.target;
+  }
+
   _status(n) {
     const s = this._t.status;
     if (n.status === "action") return s.action(n.action_title || "");
@@ -271,7 +277,7 @@ class NotificationHistoryCard extends HTMLElement {
               <ha-icon icon="${this._icon(n)}"></ha-icon>
               <div class="txt">
                 <div class="title">${esc(head)}</div>
-                <div class="meta">${esc(this._when(n.ts))}${this._config.show_target ? ` · ${esc(n.target_name || n.target)}` : ""}</div>
+                <div class="meta">${esc(this._when(n.ts))}${this._config.show_target ? ` · ${esc(this._targetName(n))}` : ""}</div>
               </div>
               ${status ? `<span class="status">${esc(status)}</span>` : ""}
             </div>

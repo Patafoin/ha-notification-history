@@ -6,10 +6,12 @@ from typing import Any
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser, async_capture_events
 
+from homeassistant.components import persistent_notification
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.setup import async_setup_component
 
 from custom_components.notification_history.const import DOMAIN
 from custom_components.notification_history.targets import resolve
@@ -228,3 +230,58 @@ async def test_legacy_mobile_app_service_resolved_from_device_name(hass: HomeAss
     device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, identifiers={("mobile_app", "pixel-id")})
     info = resolve(hass, "notify.mobile_app_pixel_de_lou")
     assert (info["platform"], info["owner"], info["name"], info["device_id"]) == ("mobile_app", PHONE_OWNER, "Pixel de Lou", device.id)
+
+
+@pytest.fixture
+async def with_persistent(hass: HomeAssistant, phone) -> MockConfigEntry:
+    """Entry with the persistent notifications option on."""
+    assert await async_setup_component(hass, "persistent_notification", {})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={},
+        options={"targets": [], "max_days": 90, "max_count": 500, "logbook": False, "persistent": True},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_persistent_notifications_recorded(hass: HomeAssistant, with_persistent, hass_ws_client) -> None:
+    persistent_notification.async_create(hass, "Washing machine done", title="Laundry", notification_id="laundry")
+    await hass.services.async_call(
+        "persistent_notification", "create", {"message": "From an automation"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    items = (await ws_list(client))["notifications"]
+    assert [(n["title"], n["message"]) for n in items] == [(None, "From an automation"), ("Laundry", "Washing machine done")]
+    assert {n["target"] for n in items} == {"persistent_notification"} and items[1]["status"] == "sent"
+
+    # Same id again: the bell shows the new one only.
+    persistent_notification.async_create(hass, "Second load done", title="Laundry", notification_id="laundry")
+    await hass.async_block_till_done()
+    items = (await ws_list(client, search="Laundry"))["notifications"]
+    assert [(n["message"], n["status"]) for n in items] == [("Second load done", "sent"), ("Washing machine done", "replaced")]
+
+    # Dismissed from the bell.
+    persistent_notification.async_dismiss(hass, "laundry")
+    await hass.async_block_till_done()
+    assert (await ws_list(client, search="Second"))["notifications"][0]["status"] == "cleared"
+
+
+async def test_persistent_notifications_admin_only(hass: HomeAssistant, with_persistent, hass_ws_client) -> None:
+    persistent_notification.async_create(hass, "Login attempt failed", notification_id="http-login")
+    await hass.async_block_till_done()
+    user = MockUser(id=PHONE_OWNER).add_to_hass(hass)
+    token = hass.auth.async_create_access_token(await hass.auth.async_create_refresh_token(user, "https://example.com"))
+    client = await hass_ws_client(hass, access_token=token)
+    assert (await ws_list(client))["notifications"] == []
+
+
+async def test_persistent_notifications_off_by_default(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    assert await async_setup_component(hass, "persistent_notification", {})
+    persistent_notification.async_create(hass, "Not recorded", notification_id="x")
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    assert (await ws_list(client))["notifications"] == []
