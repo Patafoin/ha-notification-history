@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.2.0";
+const CARD_VERSION = "0.2.1";
 
 const I18N = {
   en: {
@@ -53,6 +53,28 @@ const I18N = {
 
 const FRIGATE_RE = /\/api\/frigate\/(?:[^/]+\/)?notifications\/([^/]+)\/(?:thumbnail|snapshot)\.(?:jpg|png|webp)/;
 
+// Paths of this Home Assistant that a notification can point to.
+// Public: loaded as they are. Signed: they need a login, so the card asks Home Assistant for a
+// short-lived signed URL (auth/sign_path) rather than requesting them without credentials, which
+// would fail and count as a failed login (and can get the IP banned). Any other /api/ or /auth/
+// path is dropped: the card never requests or signs arbitrary API endpoints.
+// The Frigate notification proxy is public on purpose (phones load it without a login).
+const PUBLIC_RE = /^\/(?:local\/|api\/frigate\/(?:[^/]+\/)?notifications\/)/;
+const SIGNED_PATHS = [
+  "/media/",
+  "/api/camera_proxy/",
+  "/api/image_proxy/",
+  "/api/image/serve/",
+  "/api/media_player_proxy/",
+  "/api/frigate/",
+];
+const BLOCKED_PATHS = ["/api/", "/auth/"];
+const SIGN_EXPIRES = 3600; // seconds
+const SIGN_RENEW = 600; // renew a signed URL when it has less than this left
+const IMAGE_RE = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;
+const VIDEO_RE = /\.(mp4|webm|mov)$/i;
+const AUDIO_RE = /\.(mp3|m4a|wav|aac)$/i;
+
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
@@ -81,6 +103,7 @@ class NotificationHistoryCard extends HTMLElement {
     this._items = null;
     this._more = false;
     this._error = null;
+    this._signed = this._signed || new Map(); // path -> { url, until } or { pending: true }
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (this._hass) this._resubscribe();
   }
@@ -193,6 +216,49 @@ class NotificationHistoryCard extends HTMLElement {
     return url.pathname.replace(/^\/+/, "/") + url.search + url.hash;
   }
 
+  // What to do with a URL kept by _local(): "external" (another site), "nav" (a page of
+  // Home Assistant, opened in the app), "public" or "signed" (a file of Home Assistant),
+  // or null (dropped).
+  _kind(u) {
+    if (!u) return null;
+    if (!u.startsWith("/")) return "external";
+    if (u.startsWith("//")) return null; // never produced by _local(), refused anyway
+    const path = u.split(/[?#]/, 1)[0];
+    if (PUBLIC_RE.test(path)) return "public";
+    if (SIGNED_PATHS.some((p) => path.startsWith(p))) return "signed";
+    if (BLOCKED_PATHS.some((p) => path.startsWith(p))) return null;
+    return "nav";
+  }
+
+  // The URL to use for a path of Home Assistant: as is, signed, or null while the signature is
+  // being fetched (the card renders again when it arrives) or if the path is not allowed.
+  _src(u) {
+    const kind = this._kind(u);
+    if (kind === "external" || kind === "public" || kind === "nav") return u;
+    if (kind !== "signed") return null;
+    const path = u.split("#", 1)[0];
+    const hit = this._signed.get(path);
+    const now = Date.now();
+    // Ask for a signature: none yet, the current one ends soon, or a refusal is old enough to retry.
+    if (!hit || (!hit.pending && (hit.url ? hit.until - now <= SIGN_RENEW * 1000 : now > hit.until))) {
+      this._sign(path);
+    }
+    return hit && hit.url && hit.until > now ? hit.url : null;
+  }
+
+  async _sign(path) {
+    const old = this._signed.get(path);
+    this._signed.set(path, { ...old, pending: true });
+    try {
+      const res = await this._hass.callWS({ type: "auth/sign_path", path, expires: SIGN_EXPIRES });
+      this._signed.set(path, { url: res.path, until: Date.now() + SIGN_EXPIRES * 1000 });
+    } catch (e) {
+      this._signed.set(path, { url: null, until: Date.now() + SIGN_RENEW * 1000 }); // retried later
+      return;
+    }
+    if (!old || !old.url) this._render();
+  }
+
   _icon(n) {
     if (n.video || (this._config.frigate && FRIGATE_RE.test(n.image || ""))) return "mdi:cctv";
     if (n.image) return "mdi:image-outline";
@@ -217,15 +283,20 @@ class NotificationHistoryCard extends HTMLElement {
     const out = [];
     const seen = new Set();
     const add = (b) => {
-      // A link whose URL was rejected by _local() gets no button.
-      if ("url" in b && !b.url) return;
+      // A link whose URL was rejected by _local() or _kind() gets no button, nor one whose
+      // signed URL is not there yet (it appears when the card renders again).
+      if ("url" in b) {
+        b.kind = this._kind(b.url);
+        b.url = this._src(b.url);
+        if (!b.url) return;
+      }
       const key = b.url || `action:${b.action}`;
       if (!seen.has(key)) {
         seen.add(key);
         out.push(b);
       }
     };
-    if (n.link) add({ url: this._local(n.link), label: /\.(mp4|webm|mov)(\?|$)/.test(n.link) ? t.clip : t.open, icon: "mdi:open-in-app" });
+    if (n.link) add({ url: this._local(n.link), label: VIDEO_RE.test(n.link.split(/[?#]/, 1)[0]) ? t.clip : t.open, icon: "mdi:open-in-app" });
     if (n.video) add({ url: this._local(n.video), label: t.clip, icon: "mdi:play-circle-outline" });
     if (n.audio) add({ url: this._local(n.audio), label: t.play, icon: "mdi:play" });
     if (this._config.frigate && FRIGATE_RE.test(n.image || "") && this._local(n.image)) {
@@ -271,7 +342,7 @@ class NotificationHistoryCard extends HTMLElement {
             .join("");
           const status = this._status(n);
           const head = n.title || n.message || "";
-          const img = this._local(n.image);
+          const img = this._src(this._local(n.image));
           return `<div class="item${n.status === "replaced" || n.status === "removed" ? " dim" : ""}">
             <div class="head">
               <ha-icon icon="${this._icon(n)}"></ha-icon>
@@ -353,9 +424,12 @@ class NotificationHistoryCard extends HTMLElement {
     if (!b) return;
     const t = this._t;
     if (b.url) {
-      if (/\.(mp4|webm|mov)(\?|$)/.test(b.url)) this._overlay(`<video src="${esc(b.url)}" controls autoplay playsinline></video>`);
-      else if (/\.(mp3|m4a|wav|aac)(\?|$)/.test(b.url)) this._overlay(`<audio src="${esc(b.url)}" controls autoplay></audio>`);
-      else if (b.url.startsWith("/") && !b.url.startsWith("//")) {
+      const path = b.url.split(/[?#]/, 1)[0];
+      if (VIDEO_RE.test(path)) this._overlay(`<video src="${esc(b.url)}" controls autoplay playsinline></video>`);
+      else if (AUDIO_RE.test(path)) this._overlay(`<audio src="${esc(b.url)}" controls autoplay></audio>`);
+      else if (b.kind !== "external" && IMAGE_RE.test(path)) this._overlay(`<img src="${esc(b.url)}" alt="">`);
+      else if (b.kind === "nav" && b.url.startsWith("/") && !b.url.startsWith("//")) {
+        // Only pages of the Home Assistant app go through its router; files never do.
         window.history.pushState(null, "", b.url);
         window.dispatchEvent(new CustomEvent("location-changed"));
       } else window.open(b.url, "_blank", "noopener");

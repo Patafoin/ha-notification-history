@@ -14,7 +14,9 @@ DEFAULT_MAX_COUNT = 500
 
 # Notify platforms that write to a log or a file: not notifications a person
 # receives, so never recorded. persistent_notification has its own panel in HA.
-EXCLUDED_PLATFORMS = frozenset({"file", "syslog", "persistent_notification"})
+# A notify group calls notify again for each of its members, which are recorded
+# themselves: recording the group too would show every notification twice.
+EXCLUDED_PLATFORMS = frozenset({"file", "syslog", "persistent_notification", "group"})
 EXCLUDED_SERVICES = frozenset({"persistent_notification"})
 
 # Target of the records made from persistent notifications (the sidebar bell), when
@@ -22,9 +24,11 @@ EXCLUDED_SERVICES = frozenset({"persistent_notification"})
 PERSISTENT_TARGET = "persistent_notification"
 
 # Companion app command messages (iOS and Android): they drive the app, they are
-# not shown to anyone. See companion.home-assistant.io/docs/notifications/notification-commands
+# not shown to anyone (TTS: Android speaks data.tts_text, nothing is displayed).
+# See companion.home-assistant.io/docs/notifications/notification-commands
 COMMAND_MESSAGES = frozenset(
     {
+        "TTS",
         "clear_badge",
         "clear_notification",
         "remove_channel",

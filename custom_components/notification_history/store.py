@@ -1,6 +1,7 @@
 """Persistent history, kept in .storage/notification_history."""
 from __future__ import annotations
 
+from collections.abc import Callable
 import time
 from typing import Any
 
@@ -82,6 +83,15 @@ class HistoryStore:
         """Drop records older than max_days, then the oldest beyond max_count."""
         cutoff = (now or time.time()) - self.max_days * 86400
         keep = [r for r in self.records if r["ts"] >= cutoff][-self.max_count :] if self.max_count > 0 else []
+        if len(keep) == len(self.records):
+            return False
+        self.records = keep
+        self._by_id = {r["id"]: r for r in keep}
+        return True
+
+    def drop(self, predicate: Callable[[dict[str, Any]], bool]) -> bool:
+        """Remove the records matching predicate; True if any was removed."""
+        keep = [r for r in self.records if not predicate(r)]
         if len(keep) == len(self.records):
             return False
         self.records = keep
