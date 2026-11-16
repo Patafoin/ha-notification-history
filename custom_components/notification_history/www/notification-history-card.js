@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.1.2";
+const CARD_VERSION = "0.2.0";
 
 const I18N = {
   en: {
@@ -20,6 +20,7 @@ const I18N = {
     hour: (n) => `${n} h ago`,
     day: (n) => `${n} d ago`,
     status: { replaced: "Replaced", removed: "Removed by HA", cleared: "Dismissed", action: (t) => `Button: ${t}` },
+    persistent: "Persistent notification",
     f_title: "Title",
     f_limit: "Notifications shown before “Show more”",
     f_targets: "Targets (empty: all)",
@@ -43,6 +44,7 @@ const I18N = {
     hour: (n) => `il y a ${n} h`,
     day: (n) => `il y a ${n} j`,
     status: { replaced: "Remplacée", removed: "Retirée par HA", cleared: "Effacée", action: (t) => `Bouton : ${t}` },
+    persistent: "Notification persistante",
     f_title: "Titre",
     f_limit: "Notifications affichées avant « Voir plus »",
     f_targets: "Cibles (vide : toutes)",
@@ -236,6 +238,10 @@ class NotificationHistoryCard extends HTMLElement {
     return out;
   }
 
+  _targetName(n) {
+    return n.target === "persistent_notification" ? this._t.persistent : n.target_name || n.target;
+  }
+
   _status(n) {
     const s = this._t.status;
     if (n.status === "action") return s.action(n.action_title || "");
@@ -255,11 +261,29 @@ class NotificationHistoryCard extends HTMLElement {
       body = `<div class="empty">${t.empty}</div>`;
     } else {
       body = this._items
-      .map((n) => {
-        const btns = this._buttons(n)
-        .map((b) => {
-          this._btns.push(b);
-          return `<button class="btn" data-b="${this._btns.length - 1}"><ha-icon icon="${b.icon}"></ha-icon>${esc(b.label)}</button>`;
+        .map((n) => {
+          const btns = this._buttons(n)
+            .map((b) => {
+              this._btns.push(b);
+              return `<button class="btn" data-b="${this._btns.length - 1}"><ha-icon icon="${b.icon}"></ha-icon>${esc(b.label)}</button>`;
+            })
+            .join("");
+          const status = this._status(n);
+          const head = n.title || n.message || "";
+          const img = this._local(n.image);
+          return `<div class="item${n.status === "replaced" || n.status === "removed" ? " dim" : ""}">
+            <div class="head">
+              <ha-icon icon="${this._icon(n)}"></ha-icon>
+              <div class="txt">
+                <div class="title">${esc(head)}</div>
+                <div class="meta">${[esc(this._when(n.ts)), this._config.show_target ? esc(this._targetName(n)) : "", this._config.show_channel && n.channel ? esc(n.channel) : ""].filter(Boolean).join(" · ")}</div>
+              </div>
+              ${status ? `<span class="status">${esc(status)}</span>` : ""}
+            </div>
+            ${n.title && n.message ? `<div class="msg">${esc(n.message).replace(/\n/g, "<br>")}</div>` : ""}
+            ${img ? `<img class="img" loading="lazy" src="${esc(img)}" alt="">` : ""}
+            ${btns ? `<div class="btns">${btns}</div>` : ""}
+          </div>`;
         })
         .join("");
         const status = this._status(n);

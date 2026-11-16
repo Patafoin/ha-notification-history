@@ -20,8 +20,9 @@ A notification you tap or swipe away is gone from your phone, and Home Assistant
 - **Status**: replaced by a newer notification with the same `tag`, removed by `clear_notification`, button tapped, dismissed (Android only).
 - **Per-user**: an admin sees everything; other users only see the devices registered with their account.
 - **Frigate**: a “Watch clip” button for snapshots sent through the Frigate integration's notification proxy.
+- **Persistent notifications** (optional): the notifications of the sidebar bell, from automations or integrations, marked “Dismissed” once you dismiss them there. Admins only.
 
-Not recorded: Companion app commands (`command_webview`, `clear_badge`…), and targets that write to a log or a file (`file`, `syslog`, `persistent_notification`, which has its own panel).
+Not recorded: Companion app commands (`command_webview`, `clear_badge`…), and targets that write to a log or a file (`file`, `syslog`). Persistent notifications only with the option below.
 
 ## Requirements
 
@@ -51,6 +52,7 @@ Copy `custom_components/notification_history` into your `config/custom_component
 | Keep for | 90 days | |
 | Keep at most | 500 notifications | |
 | Logbook | off | Also writes “title — message” to the logbook. |
+| Persistent notifications | off | Also records the notifications of the sidebar bell, from the moment the option is on (the ones already in the bell are not imported). Only admins see them. |
 
 The history is stored in `.storage/notification_history`. Deleting the integration deletes it.
 
@@ -82,6 +84,7 @@ The card fires `mobile_app_notification_action` with the button's `action` (and 
 ## How it works (for the curious)
 
 - New notifications: a listener on `call_service` events of the `notify` domain. Recording only reads the calls, it never changes them.
+- Persistent notifications (option): the callback that `persistent_notification` offers to other integrations; it tells when a notification is added or dismissed.
 - Past notifications: a single read-only query of those same `call_service` events in the recorder database, run once in the recorder's executor.
 - Phones and tablets: the device and its owner come from the device registry and the `mobile_app` entry (`device_id`, `device_name`, `user_id`). The legacy service `notify.mobile_app_<device>` is matched by the name `mobile_app` gives it; no `mobile_app` secret (webhook id, tokens) is read.
 - History: `.storage/notification_history`, deleted with the integration. The card is served from `/notification_history/` and added as a Lovelace resource (storage mode).

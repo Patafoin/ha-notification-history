@@ -20,8 +20,9 @@ Une notification touchée ou effacée disparaît du téléphone, et Home Assista
 - **Statut** : remplacée par une notification plus récente avec le même `tag`, retirée par `clear_notification`, bouton touché, effacée (Android seulement).
 - **Par utilisateur** : un administrateur voit tout ; les autres utilisateurs ne voient que les appareils enregistrés avec leur compte.
 - **Frigate** : un bouton « Voir le clip » pour les images envoyées par le proxy de notification de l'intégration Frigate.
+- **Notifications persistantes** (option) : les notifications de la cloche de la barre latérale, créées par des automatisations ou des intégrations, marquées « Effacée » quand vous les fermez. Réservé aux admins.
 
-Non enregistrés : les commandes de l'app Companion (`command_webview`, `clear_badge`…) et les cibles qui écrivent dans un journal ou un fichier (`file`, `syslog`, `persistent_notification`, qui a son propre panneau).
+Non enregistrés : les commandes de l'app Companion (`command_webview`, `clear_badge`…) et les cibles qui écrivent dans un journal ou un fichier (`file`, `syslog`). Les notifications persistantes, seulement avec l'option ci-dessous.
 
 ## Prérequis
 
@@ -51,6 +52,7 @@ Copier `custom_components/notification_history` dans `config/custom_components/`
 | Conserver pendant | 90 jours | |
 | Conserver au plus | 500 notifications | |
 | Journal | non | Écrit aussi « titre — message » dans le journal. |
+| Notifications persistantes | non | Enregistre aussi les notifications de la cloche de la barre latérale, à partir du moment où l'option est activée (celles déjà dans la cloche ne sont pas importées). Seuls les admins les voient. |
 
 L'historique est stocké dans `.storage/notification_history`. Supprimer l'intégration le supprime.
 
@@ -82,6 +84,7 @@ La carte déclenche `mobile_app_notification_action` avec l'`action` du bouton (
 ## Comment ça marche (pour les curieux)
 
 - Nouvelles notifications : écoute des évènements `call_service` du domaine `notify`. L'enregistrement se contente de lire les appels, il ne les modifie jamais.
+- Notifications persistantes (option) : le rappel que `persistent_notification` propose aux autres intégrations ; il signale chaque notification ajoutée ou fermée.
 - Notifications passées : une seule requête en lecture de ces mêmes évènements `call_service` dans la base du recorder, lancée une fois dans l'exécuteur du recorder.
 - Téléphones et tablettes : l'appareil et son propriétaire viennent du registre des appareils et de l'entrée `mobile_app` (`device_id`, `device_name`, `user_id`). Le service hérité `notify.mobile_app_<appareil>` est reconnu par le nom que `mobile_app` lui donne ; aucun secret de `mobile_app` (identifiant de webhook, jetons) n'est lu.
 - Historique : `.storage/notification_history`, supprimé avec l'intégration. La carte est servie depuis `/notification_history/` et ajoutée comme ressource Lovelace (mode stockage).
