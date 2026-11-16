@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.2.1";
+const CARD_VERSION = "0.3.0";
 
 const I18N = {
   en: {
@@ -260,7 +260,9 @@ class NotificationHistoryCard extends HTMLElement {
   }
 
   // http(s) URLs and markdown [text](url) links in a message become links.
-  // Each URL goes through _local(), like the buttons; a rejected one stays text.
+  // Each URL goes through _local(), _kind() and _src(), like the buttons: a rejected one stays
+  // text, and a file of this Home Assistant that needs a login gets a signed URL (plain text
+  // until the signature arrives).
   _linkify(text) {
     const re = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s<>"'\])]+/g;
     let out = "";
@@ -275,8 +277,10 @@ class NotificationHistoryCard extends HTMLElement {
         if (trail) label = url = url.slice(0, -trail.length);
       }
       const safe = this._local(url);
+      const kind = this._kind(safe);
+      const href = kind && this._src(safe);
       out += esc(text.slice(last, m.index));
-      out += safe ? `<a href="${esc(safe)}" data-l target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : esc(label);
+      out += href ? `<a href="${esc(href)}" data-l="${kind}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : esc(label);
       out += esc(trail);
       last = m.index + m[0].length;
     }
@@ -431,7 +435,7 @@ class NotificationHistoryCard extends HTMLElement {
     root.querySelectorAll("a[data-l]").forEach((el) =>
       el.addEventListener("click", (e) => {
         e.preventDefault();
-        this._run({ url: el.getAttribute("href") });
+        this._run({ url: el.getAttribute("href"), kind: el.dataset.l });
       })
     );
     const more = root.querySelector("[data-more]");
