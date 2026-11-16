@@ -16,6 +16,7 @@ from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.start import async_at_started
 
 from .backfill import async_fetch_past
 from .const import (
@@ -64,7 +65,8 @@ class HistoryManager:
         self._refresh_names()
         if hass.state is not CoreState.running:
             # Some notify entities (custom integrations) only exist once HA has fully started.
-            self._unsubs.append(hass.bus.async_listen_once("homeassistant_started", lambda _: self._refresh_names()))
+            # async_at_started, not listen_once: its unsub is safe to call after it fired.
+            self._unsubs.append(async_at_started(hass, self._refresh_names_started))
         self._unsubs.append(hass.bus.async_listen(EVENT_CALL_SERVICE, self._on_call, self._is_notify))
         self._unsubs.append(hass.bus.async_listen(EVENT_ACTION, self._on_action))
         self._unsubs.append(hass.bus.async_listen(EVENT_CLEARED, self._on_cleared))
@@ -72,17 +74,15 @@ class HistoryManager:
         if self.persistent:
             self._unsubs.append(async_register_callback(hass, self._on_persistent))
         if not self.store.backfilled:
-            if hass.state is CoreState.running:
-                hass.async_create_background_task(self.async_backfill(), "notification_history backfill")
-            else:
-                self._unsubs.append(
-                    hass.bus.async_listen_once(
-                        "homeassistant_started",
-                        lambda _: hass.async_create_background_task(
-                            self.async_backfill(), "notification_history backfill"
-                        ),
-                    )
-                )
+            self._unsubs.append(async_at_started(hass, self._start_backfill))
+
+    @callback
+    def _refresh_names_started(self, _hass: HomeAssistant) -> None:
+        self._refresh_names()
+
+    @callback
+    def _start_backfill(self, hass: HomeAssistant) -> None:
+        hass.async_create_background_task(self.async_backfill(), "notification_history backfill")
 
     @callback
     def _refresh_names(self) -> None:
@@ -100,10 +100,7 @@ class HistoryManager:
 
     async def async_stop(self) -> None:
         while self._unsubs:
-            try:
-                self._unsubs.pop()()
-            except ValueError:  # listen_once already fired
-                pass
+            self._unsubs.pop()()
         await self.store.async_save()
 
     async def async_backfill(self) -> None:

@@ -22,7 +22,7 @@ A notification you tap or swipe away is gone from your phone, and Home Assistant
 - **Frigate**: a “Watch clip” button for snapshots sent through the Frigate integration's notification proxy.
 - **Persistent notifications** (optional): the notifications of the sidebar bell, from automations or integrations, marked “Dismissed” once you dismiss them there. Admins only.
 
-Not recorded: Companion app commands (`command_webview`, `clear_badge`…), and targets that write to a log or a file (`file`, `syslog`). Persistent notifications only with the option below.
+Not recorded: Companion app commands (`command_webview`, `clear_badge`, `TTS`…), notify groups (each member is recorded instead, so nothing shows up twice), and targets that write to a log or a file (`file`, `syslog`). Persistent notifications only with the option below.
 
 ## Requirements
 
@@ -71,6 +71,15 @@ frigate: true
 ```
 
 It also has a visual editor.
+
+## Links and images
+
+Notifications can be sent by any user or automation, so the card only trusts what it can check:
+
+- Only `http` and `https` links get a button. Anything else (`javascript:`, `data:`, app-only links like `entityId:` or `intent://`) is left out.
+- A link to a page of your Home Assistant (same address, or its internal or external URL) opens inside Home Assistant. Other sites open in a new tab.
+- Images and files of your Home Assistant that need a login (`/media/…`, camera and image proxies) are loaded with a short-lived signed URL from Home Assistant, as the app does. Other `/api/` addresses are not loaded. The Frigate notification proxy and `/local/` are public and are loaded as they are.
+- Images open in a viewer over the card; videos and audio play there too.
 
 ## Replaying a button
 

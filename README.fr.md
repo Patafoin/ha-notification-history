@@ -22,7 +22,7 @@ Une notification touchée ou effacée disparaît du téléphone, et Home Assista
 - **Frigate** : un bouton « Voir le clip » pour les images envoyées par le proxy de notification de l'intégration Frigate.
 - **Notifications persistantes** (option) : les notifications de la cloche de la barre latérale, créées par des automatisations ou des intégrations, marquées « Effacée » quand vous les fermez. Réservé aux admins.
 
-Non enregistrés : les commandes de l'app Companion (`command_webview`, `clear_badge`…) et les cibles qui écrivent dans un journal ou un fichier (`file`, `syslog`). Les notifications persistantes, seulement avec l'option ci-dessous.
+Non enregistrés : les commandes de l'app Companion (`command_webview`, `clear_badge`, `TTS`…), les groupes notify (chaque membre est enregistré à la place, pour ne rien afficher deux fois) et les cibles qui écrivent dans un journal ou un fichier (`file`, `syslog`). Les notifications persistantes, seulement avec l'option ci-dessous.
 
 ## Prérequis
 
@@ -71,6 +71,15 @@ frigate: true
 ```
 
 Elle a aussi un éditeur visuel.
+
+## Liens et images
+
+N'importe quel utilisateur ou automatisation peut envoyer une notification : la carte ne garde que ce qu'elle peut vérifier.
+
+- Seuls les liens `http` et `https` ont un bouton. Le reste (`javascript:`, `data:`, liens propres à l'app comme `entityId:` ou `intent://`) est ignoré.
+- Un lien vers une page de votre Home Assistant (même adresse, ou son URL interne ou externe) s'ouvre dans Home Assistant. Les autres sites s'ouvrent dans un nouvel onglet.
+- Les images et fichiers de votre Home Assistant qui demandent une connexion (`/media/…`, proxys de caméra et d'image) sont chargés avec une URL signée de courte durée fournie par Home Assistant, comme le fait l'app. Les autres adresses `/api/` ne sont pas chargées. Le proxy de notification de Frigate et `/local/` sont publics et chargés tels quels.
+- Les images s'ouvrent dans une visionneuse par-dessus la carte ; les vidéos et l'audio s'y lisent aussi.
 
 ## Relancer un bouton
 

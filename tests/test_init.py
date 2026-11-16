@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser, async_capture_events
 
 from homeassistant.components import persistent_notification
-from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import Context, CoreState, HomeAssistant
 from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -199,6 +200,22 @@ async def test_selected_targets_only(hass: HomeAssistant, phone, hass_ws_client)
     assert [n["message"] for n in (await ws_list(client))["notifications"]] == ["keep"]
 
 
+async def test_reload_after_started_logs_no_error(
+    hass: HomeAssistant, config_entry: MockConfigEntry, phone, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Set up before HA has started, then unload: no 'Unable to remove unknown job listener'."""
+    hass.set_state(CoreState.starting)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert "Unable to remove unknown job listener" not in caplog.text
+
+
 async def test_clear_service_and_unload(hass: HomeAssistant, loaded, hass_ws_client) -> None:
     fire_notify(hass, "mobile_app_phone", {"message": "a"})
     fire_notify(hass, "alexa_media", {"message": "b"})
@@ -285,3 +302,43 @@ async def test_persistent_notifications_off_by_default(hass: HomeAssistant, load
     await hass.async_block_till_done()
     client = await hass_ws_client(hass)
     assert (await ws_list(client))["notifications"] == []
+
+
+async def test_tts_command_not_recorded(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    """Android speaks data.tts_text for message TTS: nothing is shown, like the other commands."""
+    fire_notify(hass, "mobile_app_phone", {"message": "TTS", "data": {"tts_text": "Dinner is ready"}})
+    fire_notify(hass, "mobile_app_phone", {"message": "shown"})
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    assert [n["message"] for n in (await ws_list(client))["notifications"]] == ["shown"]
+
+
+async def test_old_tts_records_dropped_on_load(hass: HomeAssistant, config_entry, phone, hass_storage, hass_ws_client) -> None:
+    base = {"target": "notify.mobile_app_phone", "title": None, "status": "sent", "actions": []}
+    hass_storage[DOMAIN] = {
+        "version": 1,
+        "key": DOMAIN,
+        "data": {
+            "backfilled": True,
+            "records": [
+                {**base, "id": "a", "ts": 1e9 + 1, "message": "TTS"},
+                {**base, "id": "b", "ts": 1e9 + 2, "message": "kept"},
+            ],
+        },
+    }
+    with patch("time.time", return_value=1e9 + 10):
+        config_entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+        client = await hass_ws_client(hass)
+        assert [n["message"] for n in (await ws_list(client))["notifications"]] == ["kept"]
+
+
+async def test_notify_group_not_recorded_twice(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    """A group calls notify again for each member: only the member is recorded."""
+    hass.data["notify_services"]["group"] = [FakeLegacyService("family")]
+    fire_notify(hass, "family", {"message": "Dinner"})
+    fire_notify(hass, "mobile_app_phone", {"message": "Dinner"})
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    assert [n["target"] for n in (await ws_list(client))["notifications"]] == ["notify.mobile_app_phone"]
