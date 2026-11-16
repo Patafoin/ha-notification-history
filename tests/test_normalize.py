@@ -87,3 +87,12 @@ def test_clear_notification_with_tag_is_a_removal() -> None:
 
 def test_empty_message_ignored() -> None:
     assert call("mobile_app_phone", {}) == ([], [])
+
+
+def test_ios_camera_entity() -> None:
+    """iOS data.entity_id shows a camera live; only a well-formed camera entity id is kept."""
+    [r] = call("mobile_app_iphone", {"message": "Doorbell", "data": {"entity_id": "camera.front_door"}})[0]
+    assert r["camera"] == "camera.front_door"
+    for bad in ("light.kitchen", "camera.x/../../api/states", "camera.X", "camera.a?b=1", ["camera.a"]):
+        [r] = call("mobile_app_iphone", {"message": "x", "data": {"entity_id": bad}})[0]
+        assert r["camera"] is None, bad

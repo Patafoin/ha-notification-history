@@ -70,12 +70,24 @@ show_target: true
 channels:                   # optional: only these Android channels
   - Frigate
 show_channel: false         # show the Android channel next to the date
+groups:                     # optional: only these groups (data.group, iOS and Android)
+  - cameras
+show_group: false           # show the group next to the date
 frigate: true
 ```
 
-One card per topic: filter on the Android notification `channel` (`data.channel`) you already use in your automations, for example one card for Frigate and one for the server. Notifications without a channel (iOS, speakers, e-mail…) only show up in cards without a channel filter.
+One card per topic: filter on the Android notification `channel` (`data.channel`) you already use in your automations, for example one card for Frigate and one for the server. Notifications without a channel (iOS, speakers, e-mail…) only show up in cards without a channel filter. On iOS, use `group` instead: the Companion app uses it on both iOS and Android to group notifications, and the `groups` option filters on it the same way.
 
 It also has a visual editor.
+
+## iPhone and Android
+
+Everything works with both apps, except two things the iOS app does not provide:
+
+- **Dismissed** status: only the Android app tells Home Assistant when a notification is swiped away.
+- **Channels**: Android only. Use `group` to filter iPhone notifications.
+
+iOS camera notifications (`data.entity_id: camera.…`) get a **Camera now** button: it shows the camera's current image (not the one at the time of the notification), through a signed URL.
 
 ## Links and images
 
@@ -94,7 +106,7 @@ The card fires `mobile_app_notification_action` with the button's `action` (and 
 ## Services and WebSocket API
 
 - `notification_history.clear` (optional `target`): deletes the history. Admin only.
-- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/run_action`. Non-admin users only get the notifications of their own devices.
+- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`. Non-admin users only get the notifications of their own devices.
 
 ## How it works (for the curious)
 

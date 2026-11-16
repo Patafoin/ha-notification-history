@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.3.0";
+const CARD_VERSION = "0.4.0";
 
 const I18N = {
   en: {
@@ -12,6 +12,7 @@ const I18N = {
     open: "Open",
     clip: "Watch clip",
     play: "Play",
+    camera: "Camera now",
     run_confirm: (t) => `Run “${t}”?`,
     run_ok: (t) => `“${t}” sent`,
     run_ko: (e) => `Failed: ${e}`,
@@ -27,6 +28,8 @@ const I18N = {
     f_show_target: "Show the target name",
     f_channels: "Android channels (empty: all)",
     f_show_channel: "Show the Android channel",
+    f_groups: "Groups (data.group, empty: all)",
+    f_show_group: "Show the group",
     f_frigate: "“Watch clip” button for Frigate snapshots",
   },
   fr: {
@@ -36,6 +39,7 @@ const I18N = {
     open: "Ouvrir",
     clip: "Voir le clip",
     play: "Écouter",
+    camera: "Caméra maintenant",
     run_confirm: (t) => `Lancer « ${t} » ?`,
     run_ok: (t) => `« ${t} » envoyé`,
     run_ko: (e) => `Échec : ${e}`,
@@ -51,6 +55,8 @@ const I18N = {
     f_show_target: "Afficher le nom de la cible",
     f_channels: "Canaux Android (vide : tous)",
     f_show_channel: "Afficher le canal Android",
+    f_groups: "Groupes (data.group, vide : tous)",
+    f_show_group: "Afficher le groupe",
     f_frigate: "Bouton « Voir le clip » pour les images Frigate",
   },
 };
@@ -78,6 +84,7 @@ const SIGN_RENEW = 600; // renew a signed URL when it has less than this left
 const IMAGE_RE = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;
 const VIDEO_RE = /\.(mp4|webm|mov)$/i;
 const AUDIO_RE = /\.(mp3|m4a|wav|aac)$/i;
+const CAMERA_RE = /^camera\.[a-z0-9_]+$/;
 
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -94,6 +101,8 @@ class NotificationHistoryCard extends HTMLElement {
         { name: "show_target", selector: { boolean: {} } },
         { name: "channels", selector: { text: { multiple: true } } },
         { name: "show_channel", selector: { boolean: {} } },
+        { name: "groups", selector: { text: { multiple: true } } },
+        { name: "show_group", selector: { boolean: {} } },
         { name: "frigate", selector: { boolean: {} } },
       ],
       computeLabel: (s) => t(`f_${s.name}`),
@@ -144,6 +153,7 @@ class NotificationHistoryCard extends HTMLElement {
     if (Array.isArray(this._config.targets) && this._config.targets.length) f.targets = this._config.targets;
     if (Array.isArray(this._config.devices) && this._config.devices.length) f.devices = this._config.devices;
     if (Array.isArray(this._config.channels) && this._config.channels.length) f.channels = this._config.channels;
+    if (Array.isArray(this._config.groups) && this._config.groups.length) f.groups = this._config.groups;
     return f;
   }
 
@@ -337,6 +347,10 @@ class NotificationHistoryCard extends HTMLElement {
     if (this._config.frigate && FRIGATE_RE.test(n.image || "") && this._local(n.image)) {
       add({ url: this._local(n.image).replace(/(thumbnail|snapshot)\.(jpg|png|webp).*$/, "clip.mp4"), label: t.clip, icon: "mdi:play-circle-outline" });
     }
+    // iOS camera notification (data.entity_id): the camera's image now, not the one at sending time.
+    if (n.camera && CAMERA_RE.test(n.camera)) {
+      add({ url: this._local(`/api/camera_proxy/${n.camera}`), label: t.camera, icon: "mdi:cctv", image: true });
+    }
     for (const a of n.actions || []) {
       if (a.action === "REPLY") continue;
       if (a.action === "URI" && a.uri) add({ url: this._local(a.uri), label: a.title, icon: "mdi:open-in-new" });
@@ -383,7 +397,7 @@ class NotificationHistoryCard extends HTMLElement {
               <ha-icon icon="${this._icon(n)}"></ha-icon>
               <div class="txt">
                 <div class="title">${esc(head)}</div>
-                <div class="meta">${esc(this._when(n.ts))}${this._config.show_target ? ` · ${esc(this._targetName(n))}` : ""}${this._config.show_channel && n.channel ? ` · ${esc(n.channel)}` : ""}</div>
+                <div class="meta">${esc(this._when(n.ts))}${this._config.show_target ? ` · ${esc(this._targetName(n))}` : ""}${this._config.show_channel && n.channel ? ` · ${esc(n.channel)}` : ""}${this._config.show_group && n.group ? ` · ${esc(n.group)}` : ""}</div>
               </div>
               ${status ? `<span class="status">${esc(status)}</span>` : ""}
             </div>
@@ -470,7 +484,7 @@ class NotificationHistoryCard extends HTMLElement {
       const path = b.url.split(/[?#]/, 1)[0];
       if (VIDEO_RE.test(path)) this._overlay(`<video src="${esc(b.url)}" controls autoplay playsinline></video>`);
       else if (AUDIO_RE.test(path)) this._overlay(`<audio src="${esc(b.url)}" controls autoplay></audio>`);
-      else if (b.kind !== "external" && IMAGE_RE.test(path)) this._overlay(`<img src="${esc(b.url)}" alt="">`);
+      else if (b.image || (b.kind !== "external" && IMAGE_RE.test(path))) this._overlay(`<img src="${esc(b.url)}" alt="">`);
       else if (b.kind === "nav" && b.url.startsWith("/") && !b.url.startsWith("//")) {
         // Only pages of the Home Assistant app go through its router; files never do.
         window.history.pushState(null, "", b.url);

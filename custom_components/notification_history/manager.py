@@ -287,6 +287,7 @@ class HistoryManager:
                     "tag": notification_id,
                     "group": None,
                     "channel": None,
+                    "camera": None,
                     "sub_targets": [],
                     "context_id": None,
                     "sent_by": None,

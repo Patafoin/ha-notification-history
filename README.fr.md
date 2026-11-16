@@ -70,12 +70,24 @@ show_target: true
 channels:                   # facultatif : seulement ces canaux Android
   - Frigate
 show_channel: false         # afficher le canal Android à côté de la date
+groups:                     # facultatif : seulement ces groupes (data.group, iOS et Android)
+  - cameras
+show_group: false           # afficher le groupe à côté de la date
 frigate: true
 ```
 
-Une carte par sujet : filtrez sur le canal de notification Android (`data.channel`) que vous utilisez déjà dans vos automatisations, par exemple une carte pour Frigate et une pour le serveur. Les notifications sans canal (iOS, enceintes, e-mail…) n'apparaissent que dans les cartes sans filtre de canal.
+Une carte par sujet : filtrez sur le canal de notification Android (`data.channel`) que vous utilisez déjà dans vos automatisations, par exemple une carte pour Frigate et une pour le serveur. Les notifications sans canal (iOS, enceintes, e-mail…) n'apparaissent que dans les cartes sans filtre de canal. Sur iOS, utilisez plutôt `group` : l'app Companion s'en sert sur iOS comme sur Android pour regrouper les notifications, et l'option `groups` filtre dessus de la même façon.
 
 Elle a aussi un éditeur visuel.
+
+## iPhone et Android
+
+Tout fonctionne avec les deux apps, sauf deux choses que l'app iOS ne fournit pas :
+
+- le statut **Effacée** : seule l'app Android prévient Home Assistant quand une notification est balayée ;
+- les **canaux** : Android seulement. Pour filtrer les notifications d'iPhone, utilisez `group`.
+
+Les notifications de caméra d'iOS (`data.entity_id: camera.…`) ont un bouton **Caméra maintenant** : il montre l'image actuelle de la caméra (pas celle du moment de la notification), par une URL signée.
 
 ## Liens et images
 
@@ -94,7 +106,7 @@ La carte déclenche `mobile_app_notification_action` avec l'`action` du bouton (
 ## Services et API WebSocket
 
 - `notification_history.clear` (`target` facultatif) : vide l'historique. Réservé aux administrateurs.
-- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/run_action`. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
+- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
 
 ## Comment ça marche (pour les curieux)
 

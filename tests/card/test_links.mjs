@@ -122,4 +122,17 @@ assert.equal(
 );
 assert.equal(card._linkify('[x](javascript:alert(1)) "quoted"'), "[x](javascript:alert(1)) &quot;quoted&quot;");
 
+// iOS camera notification: a "Camera now" button with a signed camera proxy URL, shown in the viewer.
+// A malformed entity id gets no button (it would go into the URL).
+opened.length = 0;
+card._buttons({ id: "c1", camera: "camera.front_door" });
+await tick();
+const cam = card._buttons({ id: "c1", camera: "camera.front_door" });
+assert.deepEqual(cam.map((b) => [b.label, b.kind, b.url]), [["Camera now", "signed", "/api/camera_proxy/camera.front_door?authSig=SIG"]]);
+await card._run(cam[0]);
+assert.deepEqual(opened, ['overlay:<img src="/api/camera_proxy/camera.front_door?authSig=SIG" alt="">']);
+for (const bad of ["camera.x/../../api/states", "light.kitchen", "camera.X", "camera.a?b=1"]) {
+  assert.deepEqual(card._buttons({ id: "c2", camera: bad }), [], bad);
+}
+
 console.log("card link tests: ok");

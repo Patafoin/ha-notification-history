@@ -363,3 +363,15 @@ async def test_channel_recorded_filtered_and_listed(hass: HomeAssistant, loaded,
     other = await hass_ws_client(hass, access_token=token)
     await other.send_json_auto_id({"type": f"{DOMAIN}/channels"})
     assert (await other.receive_json())["result"] == {"channels": []}
+
+
+async def test_group_filter_and_list(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    fire_notify(hass, "mobile_app_phone", {"message": "Motion", "data": {"group": "cameras"}})
+    fire_notify(hass, "mobile_app_phone", {"message": "Backup", "data": {"group": "server"}})
+    fire_notify(hass, "mobile_app_phone", {"message": "No group"})
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    items = (await ws_list(client, groups=["cameras"]))["notifications"]
+    assert [(n["message"], n["group"]) for n in items] == [("Motion", "cameras")]
+    await client.send_json_auto_id({"type": f"{DOMAIN}/groups"})
+    assert (await client.receive_json())["result"] == {"groups": ["cameras", "server"]}
