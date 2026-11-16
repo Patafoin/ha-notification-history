@@ -25,6 +25,8 @@ const I18N = {
     f_limit: "Notifications shown before “Show more”",
     f_targets: "Targets (empty: all)",
     f_show_target: "Show the target name",
+    f_channels: "Android channels (empty: all)",
+    f_show_channel: "Show the Android channel",
     f_frigate: "“Watch clip” button for Frigate snapshots",
   },
   fr: {
@@ -47,6 +49,8 @@ const I18N = {
     f_limit: "Notifications affichées avant « Voir plus »",
     f_targets: "Cibles (vide : toutes)",
     f_show_target: "Afficher le nom de la cible",
+    f_channels: "Canaux Android (vide : tous)",
+    f_show_channel: "Afficher le canal Android",
     f_frigate: "Bouton « Voir le clip » pour les images Frigate",
   },
 };
@@ -88,6 +92,8 @@ class NotificationHistoryCard extends HTMLElement {
         { name: "limit", selector: { number: { min: 1, max: 200, mode: "box" } } },
         { name: "targets", selector: { text: { multiple: true } } },
         { name: "show_target", selector: { boolean: {} } },
+        { name: "channels", selector: { text: { multiple: true } } },
+        { name: "show_channel", selector: { boolean: {} } },
         { name: "frigate", selector: { boolean: {} } },
       ],
       computeLabel: (s) => t(`f_${s.name}`),
@@ -137,6 +143,7 @@ class NotificationHistoryCard extends HTMLElement {
     const f = {};
     if (Array.isArray(this._config.targets) && this._config.targets.length) f.targets = this._config.targets;
     if (Array.isArray(this._config.devices) && this._config.devices.length) f.devices = this._config.devices;
+    if (Array.isArray(this._config.channels) && this._config.channels.length) f.channels = this._config.channels;
     return f;
   }
 
@@ -376,7 +383,7 @@ class NotificationHistoryCard extends HTMLElement {
               <ha-icon icon="${this._icon(n)}"></ha-icon>
               <div class="txt">
                 <div class="title">${esc(head)}</div>
-                <div class="meta">${esc(this._when(n.ts))}${this._config.show_target ? ` · ${esc(this._targetName(n))}` : ""}</div>
+                <div class="meta">${esc(this._when(n.ts))}${this._config.show_target ? ` · ${esc(this._targetName(n))}` : ""}${this._config.show_channel && n.channel ? ` · ${esc(n.channel)}` : ""}</div>
               </div>
               ${status ? `<span class="status">${esc(status)}</span>` : ""}
             </div>

@@ -67,8 +67,13 @@ limit: 15                   # shown before “Show more”
 targets:                    # optional, default: everything you can see
   - notify.mobile_app_my_phone
 show_target: true
+channels:                   # optional: only these Android channels
+  - Frigate
+show_channel: false         # show the Android channel next to the date
 frigate: true
 ```
+
+One card per topic: filter on the Android notification `channel` (`data.channel`) you already use in your automations, for example one card for Frigate and one for the server. Notifications without a channel (iOS, speakers, e-mail…) only show up in cards without a channel filter.
 
 It also has a visual editor.
 
@@ -79,6 +84,7 @@ Notifications can be sent by any user or automation, so the card only trusts wha
 - Only `http` and `https` links get a button. Anything else (`javascript:`, `data:`, app-only links like `entityId:` or `intent://`) is left out.
 - A link to a page of your Home Assistant (same address, or its internal or external URL) opens inside Home Assistant. Other sites open in a new tab.
 - Images and files of your Home Assistant that need a login (`/media/…`, camera and image proxies) are loaded with a short-lived signed URL from Home Assistant, as the app does. Other `/api/` addresses are not loaded. The Frigate notification proxy and `/local/` are public and are loaded as they are.
+- Links written in the message (`https://…` or markdown `[text](https://…)`) follow the same rules; a link that is not allowed stays plain text.
 - Images open in a viewer over the card; videos and audio play there too.
 
 ## Replaying a button
@@ -88,7 +94,7 @@ The card fires `mobile_app_notification_action` with the button's `action` (and 
 ## Services and WebSocket API
 
 - `notification_history.clear` (optional `target`): deletes the history. Admin only.
-- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/run_action`. Non-admin users only get the notifications of their own devices.
+- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/run_action`. Non-admin users only get the notifications of their own devices.
 
 ## How it works (for the curious)
 

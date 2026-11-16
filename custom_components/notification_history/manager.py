@@ -75,6 +75,8 @@ class HistoryManager:
             self._unsubs.append(async_register_callback(hass, self._on_persistent))
         if not self.store.backfilled:
             self._unsubs.append(async_at_started(hass, self._start_backfill))
+        elif not self.store.channels_filled:
+            self._unsubs.append(async_at_started(hass, self._start_fill_channels))
 
     @callback
     def _refresh_names_started(self, _hass: HomeAssistant) -> None:
@@ -83,6 +85,10 @@ class HistoryManager:
     @callback
     def _start_backfill(self, hass: HomeAssistant) -> None:
         hass.async_create_background_task(self.async_backfill(), "notification_history backfill")
+
+    @callback
+    def _start_fill_channels(self, hass: HomeAssistant) -> None:
+        hass.async_create_background_task(self.async_fill_channels(), "notification_history channels")
 
     @callback
     def _refresh_names(self) -> None:
@@ -120,9 +126,34 @@ class HistoryManager:
             )
         added = len(self.store.records) - before
         self.store.backfilled = True
+        self.store.channels_filled = True  # imported records already have their channel
         self.store.purge()
         await self.store.async_save()
         _LOGGER.info("Imported %s past notifications from the recorder", added)
+        async_dispatcher_send(self.hass, SIGNAL_UPDATED, None)
+
+    async def async_fill_channels(self) -> None:
+        """Once: add the channel to records made before 1.2.0, from the calls still in the recorder."""
+        rows = await async_fetch_past(self.hass, self.store.max_days)
+        filled = 0
+        for ts, context_id, user_id, data in rows:
+            records, _ = normalize_call(
+                data.get("service", ""),
+                data.get("service_data") or {},
+                ts=ts,
+                context_id=context_id or f"past-{ts}",
+                user_id=user_id,
+            )
+            for new in records:
+                old = self.store.get(new["id"])
+                if old is not None and "channel" not in old:
+                    old["channel"] = new["channel"]
+                    filled += 1
+        for record in self.store.records:
+            record.setdefault("channel", None)
+        self.store.channels_filled = True
+        await self.store.async_save()
+        _LOGGER.debug("Added the channel to %s recorded notifications", filled)
         async_dispatcher_send(self.hass, SIGNAL_UPDATED, None)
 
     @callback
@@ -255,6 +286,7 @@ class HistoryManager:
                     # Re-creating a notification with the same id replaces it in the bell.
                     "tag": notification_id,
                     "group": None,
+                    "channel": None,
                     "sub_targets": [],
                     "context_id": None,
                     "sent_by": None,

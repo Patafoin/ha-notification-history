@@ -67,8 +67,13 @@ limit: 15                   # affichées avant « Voir plus »
 targets:                    # facultatif, par défaut : tout ce que vous pouvez voir
   - notify.mobile_app_mon_telephone
 show_target: true
+channels:                   # facultatif : seulement ces canaux Android
+  - Frigate
+show_channel: false         # afficher le canal Android à côté de la date
 frigate: true
 ```
+
+Une carte par sujet : filtrez sur le canal de notification Android (`data.channel`) que vous utilisez déjà dans vos automatisations, par exemple une carte pour Frigate et une pour le serveur. Les notifications sans canal (iOS, enceintes, e-mail…) n'apparaissent que dans les cartes sans filtre de canal.
 
 Elle a aussi un éditeur visuel.
 
@@ -79,6 +84,7 @@ N'importe quel utilisateur ou automatisation peut envoyer une notification : la 
 - Seuls les liens `http` et `https` ont un bouton. Le reste (`javascript:`, `data:`, liens propres à l'app comme `entityId:` ou `intent://`) est ignoré.
 - Un lien vers une page de votre Home Assistant (même adresse, ou son URL interne ou externe) s'ouvre dans Home Assistant. Les autres sites s'ouvrent dans un nouvel onglet.
 - Les images et fichiers de votre Home Assistant qui demandent une connexion (`/media/…`, proxys de caméra et d'image) sont chargés avec une URL signée de courte durée fournie par Home Assistant, comme le fait l'app. Les autres adresses `/api/` ne sont pas chargées. Le proxy de notification de Frigate et `/local/` sont publics et chargés tels quels.
+- Les liens écrits dans le message (`https://…` ou markdown `[texte](https://…)`) suivent les mêmes règles ; un lien non autorisé reste du texte.
 - Les images s'ouvrent dans une visionneuse par-dessus la carte ; les vidéos et l'audio s'y lisent aussi.
 
 ## Relancer un bouton
@@ -88,7 +94,7 @@ La carte déclenche `mobile_app_notification_action` avec l'`action` du bouton (
 ## Services et API WebSocket
 
 - `notification_history.clear` (`target` facultatif) : vide l'historique. Réservé aux administrateurs.
-- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/run_action`. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
+- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/run_action`. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
 
 ## Comment ça marche (pour les curieux)
 

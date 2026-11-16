@@ -342,3 +342,24 @@ async def test_notify_group_not_recorded_twice(hass: HomeAssistant, loaded, hass
     await hass.async_block_till_done()
     client = await hass_ws_client(hass)
     assert [n["target"] for n in (await ws_list(client))["notifications"]] == ["notify.mobile_app_phone"]
+
+
+async def test_channel_recorded_filtered_and_listed(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    fire_notify(hass, "mobile_app_phone", {"message": "Person at the door", "data": {"channel": "Frigate"}})
+    fire_notify(hass, "mobile_app_phone", {"message": "Backup done", "data": {"channel": "Server"}})
+    fire_notify(hass, "alexa_media", {"message": "No channel"})
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    items = (await ws_list(client, channels=["Frigate"]))["notifications"]
+    assert [(n["message"], n["channel"]) for n in items] == [("Person at the door", "Frigate")]
+    await client.send_json_auto_id({"type": f"{DOMAIN}/channels"})
+    assert (await client.receive_json())["result"] == {"channels": ["Frigate", "Server"]}
+
+    # A non-admin only gets the channels of their own devices.
+    fire_notify(hass, "alexa_media", {"message": "Speaker", "data": {"channel": "Speakers"}})
+    await hass.async_block_till_done()
+    user = MockUser(id="other").add_to_hass(hass)
+    token = hass.auth.async_create_access_token(await hass.auth.async_create_refresh_token(user, "https://example.com"))
+    other = await hass_ws_client(hass, access_token=token)
+    await other.send_json_auto_id({"type": f"{DOMAIN}/channels"})
+    assert (await other.receive_json())["result"] == {"channels": []}

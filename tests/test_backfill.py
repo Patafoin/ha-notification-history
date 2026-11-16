@@ -1,6 +1,8 @@
 """One-off import of past notifications from the recorder."""
 from __future__ import annotations
 
+import time
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.components.recorder.common import async_wait_recording_done
@@ -58,3 +60,38 @@ async def test_imports_past_calls_once(hass: HomeAssistant, hass_ws_client, hass
     assert await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert len(hass.data[DOMAIN].store.records) == 2
+
+
+async def test_channels_filled_once_for_old_records(hass: HomeAssistant, hass_storage, options) -> None:
+    """Records made before 1.2.0 get their Android channel from the calls still in the recorder."""
+    ctx = Context()
+    hass.bus.async_fire(
+        EVENT_CALL_SERVICE,
+        {"domain": "notify", "service": "mobile_app_phone", "service_data": {"message": "Motion", "data": {"channel": "Frigate"}}},
+        context=ctx,
+    )
+    await async_wait_recording_done(hass)
+    old = {"target": "notify.mobile_app_phone", "title": None, "message": "Motion", "status": "sent", "actions": []}
+    hass_storage[DOMAIN] = {
+        "version": 1,
+        "key": DOMAIN,
+        "data": {
+            "backfilled": True,
+            "records": [
+                {**old, "id": f"{ctx.id}:notify.mobile_app_phone", "ts": time.time()},
+                {**old, "id": "gone-from-recorder", "ts": time.time()},
+            ],
+        },
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options=options)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    manager = hass.data[DOMAIN]
+    for _ in range(50):
+        if manager.store.channels_filled:
+            break
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert manager.store.channels_filled
+    by_id = {r["id"]: r for r in manager.store.records}
+    assert by_id[f"{ctx.id}:notify.mobile_app_phone"]["channel"] == "Frigate"
+    assert by_id["gone-from-recorder"]["channel"] is None

@@ -106,6 +106,8 @@ def normalize_call(
         "actions": _actions(data),
         "tag": _str(data.get("tag")),
         "group": _str(data.get("group")),
+        # Android notification channel (sound, importance…); iOS has none.
+        "channel": _str(data.get("channel")),
         "sub_targets": _as_list(service_data.get("target")),
         "context_id": context_id,
         "sent_by": user_id,

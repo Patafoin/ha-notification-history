@@ -24,15 +24,17 @@ class HistoryStore:
         self.records: list[dict[str, Any]] = []
         self._by_id: dict[str, dict[str, Any]] = {}
         self.backfilled = False
+        self.channels_filled = False  # channel added to records made before 1.2.0
 
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
         self.records = sorted(data.get("records", []), key=lambda r: r["ts"])
         self._by_id = {r["id"]: r for r in self.records}
         self.backfilled = bool(data.get("backfilled"))
+        self.channels_filled = bool(data.get("channels_filled"))
 
     def _data(self) -> dict[str, Any]:
-        return {"backfilled": self.backfilled, "records": self.records}
+        return {"backfilled": self.backfilled, "channels_filled": self.channels_filled, "records": self.records}
 
     def schedule_save(self) -> None:
         self._store.async_delay_save(self._data, SAVE_DELAY)
