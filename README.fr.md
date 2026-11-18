@@ -64,6 +64,7 @@ La carte est ajoutée automatiquement aux ressources du tableau de bord.
 type: custom:notification-history-card
 title: Notifications        # facultatif
 limit: 15                   # affichées avant « Voir plus »
+max_height: 500             # facultatif : hauteur fixe en px (ou "60vh"), la liste défile à l'intérieur
 targets:                    # facultatif, par défaut : tout ce que vous pouvez voir
   - notify.mobile_app_mon_telephone
 show_target: true
@@ -75,6 +76,8 @@ groups:                     # facultatif : seulement ces groupes (data.group, iO
 show_group: false           # afficher le groupe à côté de la date
 frigate: true
 ```
+
+Sans `max_height`, la carte s'allonge à chaque « Voir plus ». Dans une vue en sections, vous pouvez aussi redimensionner la carte : avec un nombre de lignes fixe, la liste défile à l'intérieur. La position de défilement est conservée quand de nouvelles notifications arrivent ou qu'on en charge d'autres.
 
 Une carte par sujet : filtrez sur le canal de notification Android (`data.channel`) que vous utilisez déjà dans vos automatisations, par exemple une carte pour Frigate et une pour le serveur. Les notifications sans canal (iOS, enceintes, e-mail…) n'apparaissent que dans les cartes sans filtre de canal. Sur iOS, utilisez plutôt `group` : l'app Companion s'en sert sur iOS comme sur Android pour regrouper les notifications, et l'option `groups` filtre dessus de la même façon.
 

@@ -135,4 +135,10 @@ for (const bad of ["camera.x/../../api/states", "light.kitchen", "camera.X", "ca
   assert.deepEqual(card._buttons({ id: "c2", camera: bad }), [], bad);
 }
 
+// max_height: pixels or a CSS length, nothing else ends up in the style sheet.
+for (const [v, css] of [[400, "400px"], ["400", "400px"], ["60vh", "60vh"], [" 30em ", "30em"], [0, ""], ["red; x", ""], ["1px}a{", ""], [null, ""]]) {
+  card._config = { max_height: v };
+  assert.equal(card._maxHeight(), css, String(v));
+}
+
 console.log("card link tests: ok");

@@ -64,6 +64,7 @@ The card is added to your dashboard resources automatically.
 type: custom:notification-history-card
 title: Notifications        # optional
 limit: 15                   # shown before “Show more”
+max_height: 500             # optional: fixed height in px (or "60vh"), the list scrolls inside
 targets:                    # optional, default: everything you can see
   - notify.mobile_app_my_phone
 show_target: true
@@ -75,6 +76,8 @@ groups:                     # optional: only these groups (data.group, iOS and A
 show_group: false           # show the group next to the date
 frigate: true
 ```
+
+Without `max_height`, the card grows with “Show more”. In a sections view, you can also resize the card instead: with a fixed number of rows, the list scrolls inside it. The scroll position is kept when new notifications arrive or more are loaded.
 
 One card per topic: filter on the Android notification `channel` (`data.channel`) you already use in your automations, for example one card for Frigate and one for the server. Notifications without a channel (iOS, speakers, e-mail…) only show up in cards without a channel filter. On iOS, use `group` instead: the Companion app uses it on both iOS and Android to group notifications, and the `groups` option filters on it the same way.
 
