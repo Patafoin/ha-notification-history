@@ -39,3 +39,5 @@ jobs:
         run: node --check custom_components/notification_history/www/notification-history-card.js
       - name: Card link rules
         run: node tests/card/test_links.mjs
+      - name: Card soft delete
+        run: node tests/card/test_delete.mjs

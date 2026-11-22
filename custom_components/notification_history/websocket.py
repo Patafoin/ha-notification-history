@@ -18,7 +18,7 @@ MAX_LIMIT = 200
 # What the card needs; internal fields (context, sender…) stay on the server.
 PUBLIC_FIELDS = (
     "id", "ts", "target", "target_name", "device_id", "title", "message", "image", "video", "audio",
-    "link", "actions", "tag", "group", "channel", "camera", "status", "action_title", "action_ts",
+    "link", "actions", "tag", "group", "channel", "camera", "status", "action_title", "action_ts", "deleted_ts",
 )
 
 
@@ -68,6 +68,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_channels)
     websocket_api.async_register_command(hass, ws_groups)
     websocket_api.async_register_command(hass, ws_run_action)
+    websocket_api.async_register_command(hass, ws_delete)
 
 
 @websocket_api.websocket_command(
@@ -75,6 +76,8 @@ def async_register(hass: HomeAssistant) -> None:
         vol.Required("type"): f"{DOMAIN}/list",
         vol.Optional("limit", default=50): vol.All(int, vol.Range(min=1, max=MAX_LIMIT)),
         vol.Optional("before_id"): str,
+        # Deleted notifications (soft delete from the card) are left out unless asked for.
+        vol.Optional("include_deleted", default=False): bool,
         **FILTERS,
     }
 )
@@ -95,6 +98,8 @@ def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
             continue
         if not _visible(record, connection.user) or not _matches(record, msg):
             continue
+        if record.get("deleted_ts") and not msg["include_deleted"]:
+            continue
         if len(out) == msg["limit"]:
             more = True
             break
@@ -105,7 +110,10 @@ def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/subscribe", **FILTERS})
 @callback
 def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Push {record} when a notification is added or changes, {reload: true} after an import or a purge."""
+    """Push {record} when a notification is added or changes, {reload: true} after an import or a purge.
+
+    Deleted notifications are pushed too (with deleted_ts), so the card can take them out of its list.
+    """
 
     @callback
     def forward(record: dict[str, Any] | None) -> None:
@@ -171,4 +179,26 @@ def ws_run_action(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         event_data["tag"] = record["tag"]
     hass.bus.async_fire(EVENT_ACTION, event_data, context=connection.context(msg))
     manager.mark_action(record, action, time.time())
+    connection.send_result(msg["id"], {"record": _public(record)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/delete",
+        vol.Required("record_id"): str,
+        vol.Optional("deleted", default=True): bool,
+    }
+)
+@callback
+def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Soft delete a notification (deleted: false restores it). It stays in the history until purged.
+
+    Anyone who can see the notification can delete or restore it, for every user.
+    """
+    manager = _manager(hass)
+    record = manager.store.get(msg["record_id"]) if manager else None
+    if record is None or not _visible(record, connection.user):
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Notification not found")
+        return
+    manager.set_deleted(record, msg["deleted"])
     connection.send_result(msg["id"], {"record": _public(record)})

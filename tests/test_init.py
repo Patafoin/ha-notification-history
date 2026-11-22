@@ -375,3 +375,49 @@ async def test_group_filter_and_list(hass: HomeAssistant, loaded, hass_ws_client
     assert [(n["message"], n["group"]) for n in items] == [("Motion", "cameras")]
     await client.send_json_auto_id({"type": f"{DOMAIN}/groups"})
     assert (await client.receive_json())["result"] == {"groups": ["cameras", "server"]}
+
+
+async def test_delete_is_soft_and_can_be_restored(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    fire_notify(hass, "mobile_app_phone", {"message": "first"})
+    fire_notify(hass, "mobile_app_phone", {"message": "second"})
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    second, first = (await ws_list(client))["notifications"]
+
+    sub = await hass_ws_client(hass)
+    await sub.send_json_auto_id({"type": f"{DOMAIN}/subscribe"})
+    assert (await sub.receive_json())["success"]
+
+    await client.send_json_auto_id({"type": f"{DOMAIN}/delete", "record_id": first["id"]})
+    res = await client.receive_json()
+    assert res["success"] and res["result"]["record"]["deleted_ts"]
+    pushed = await sub.receive_json()
+    assert pushed["event"]["record"]["id"] == first["id"] and pushed["event"]["record"]["deleted_ts"]
+
+    assert [n["message"] for n in (await ws_list(client))["notifications"]] == ["second"]
+    listed = (await ws_list(client, include_deleted=True))["notifications"]
+    assert [(n["message"], bool(n["deleted_ts"])) for n in listed] == [("second", False), ("first", True)]
+    # Paging past a deleted notification still works.
+    assert (await ws_list(client, limit=1))["more"] is False
+
+    await client.send_json_auto_id({"type": f"{DOMAIN}/delete", "record_id": first["id"], "deleted": False})
+    res = await client.receive_json()
+    assert res["success"] and res["result"]["record"]["deleted_ts"] is None
+    assert [n["message"] for n in (await ws_list(client))["notifications"]] == ["second", "first"]
+
+    await client.send_json_auto_id({"type": f"{DOMAIN}/delete", "record_id": "nope"})
+    assert (await client.receive_json())["error"]["code"] == "not_found"
+
+
+async def test_delete_needs_to_see_the_notification(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    fire_notify(hass, "alexa_media", {"message": "speaker"})
+    await hass.async_block_till_done()
+    admin = await hass_ws_client(hass)
+    record_id = (await ws_list(admin))["notifications"][0]["id"]
+
+    other = MockUser(id="other").add_to_hass(hass)
+    token = hass.auth.async_create_access_token(await hass.auth.async_create_refresh_token(other, "https://example.com"))
+    client = await hass_ws_client(hass, access_token=token)
+    await client.send_json_auto_id({"type": f"{DOMAIN}/delete", "record_id": record_id})
+    assert (await client.receive_json())["error"]["code"] == "not_found"
+    assert len((await ws_list(admin))["notifications"]) == 1

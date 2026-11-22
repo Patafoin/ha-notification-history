@@ -18,6 +18,7 @@ A notification you tap or swipe away is gone from your phone, and Home Assistant
 - **Full detail**: title, message, image (tap to enlarge), video, audio, the link opened by tapping the notification (`url` / `clickAction`), and the action buttons.
 - **Buttons that work**: links and `URI` buttons open in Home Assistant; other buttons fire `mobile_app_notification_action` again, as the app would (after a confirmation).
 - **Status**: replaced by a newer notification with the same `tag`, removed by `clear_notification`, button tapped, dismissed (Android only).
+- **Delete from the card**: the ✕ button hides a notification (with Undo). It is a soft delete: “Show deleted” brings deleted notifications back, dimmed, with a restore button. They are purged like the others.
 - **Per-user**: an admin sees everything; other users only see the devices registered with their account.
 - **Frigate**: a “Watch clip” button for snapshots sent through the Frigate integration's notification proxy.
 - **Persistent notifications** (optional): the notifications of the sidebar bell, from automations or integrations, marked “Dismissed” once you dismiss them there. Admins only.
@@ -75,6 +76,8 @@ groups:                     # optional: only these groups (data.group, iOS and A
   - cameras
 show_group: false           # show the group next to the date
 frigate: true
+delete: true                # ✕ button and “Show deleted” toggle
+show_deleted: false         # start with deleted notifications shown
 ```
 
 Without `max_height`, the card grows with “Show more”. In a sections view, you can also resize the card instead: with a fixed number of rows, the list scrolls inside it. The scroll position is kept when new notifications arrive or more are loaded.
@@ -109,7 +112,7 @@ The card fires `mobile_app_notification_action` with the button's `action` (and 
 ## Services and WebSocket API
 
 - `notification_history.clear` (optional `target`): deletes the history. Admin only.
-- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`. Non-admin users only get the notifications of their own devices.
+- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`, `notification_history/delete` (`record_id`, `deleted: false` to restore; `list` takes `include_deleted`). Deleting is shared by every user and allowed to anyone who can see the notification. Non-admin users only get the notifications of their own devices.
 
 ## How it works (for the curious)
 

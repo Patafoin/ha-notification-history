@@ -326,6 +326,17 @@ class HistoryManager:
         self.store.schedule_save()
         async_dispatcher_send(self.hass, SIGNAL_UPDATED, record)
 
+    def set_deleted(self, record: dict[str, Any], deleted: bool) -> None:
+        """Soft delete (hidden from the card unless it shows deleted notifications) or restore."""
+        if bool(record.get("deleted_ts")) == deleted:
+            return
+        if deleted:
+            record["deleted_ts"] = round(time.time(), 3)
+        else:
+            record.pop("deleted_ts", None)
+        self.store.schedule_save()
+        async_dispatcher_send(self.hass, SIGNAL_UPDATED, record)
+
     @callback
     def _on_action(self, event: Event) -> None:
         """A button was tapped on a device: tag the notification it came from."""

@@ -18,6 +18,7 @@ Une notification touchée ou effacée disparaît du téléphone, et Home Assista
 - **Détail complet** : titre, message, image (agrandie au toucher), vidéo, son, le lien ouvert par le toucher de la notification (`url` / `clickAction`) et les boutons d'action.
 - **Boutons utilisables** : les liens et les boutons `URI` s'ouvrent dans Home Assistant ; les autres boutons redéclenchent `mobile_app_notification_action`, comme l'app (après confirmation).
 - **Statut** : remplacée par une notification plus récente avec le même `tag`, retirée par `clear_notification`, bouton touché, effacée (Android seulement).
+- **Suppression depuis la carte** : le bouton ✕ masque une notification (avec Annuler). C'est une suppression logique : « Afficher les supprimées » les fait réapparaître, grisées, avec un bouton pour les restaurer. Elles sont purgées comme les autres.
 - **Par utilisateur** : un administrateur voit tout ; les autres utilisateurs ne voient que les appareils enregistrés avec leur compte.
 - **Frigate** : un bouton « Voir le clip » pour les images envoyées par le proxy de notification de l'intégration Frigate.
 - **Notifications persistantes** (option) : les notifications de la cloche de la barre latérale, créées par des automatisations ou des intégrations, marquées « Effacée » quand vous les fermez. Réservé aux admins.
@@ -75,6 +76,8 @@ groups:                     # facultatif : seulement ces groupes (data.group, iO
   - cameras
 show_group: false           # afficher le groupe à côté de la date
 frigate: true
+delete: true                # bouton ✕ et bascule « Afficher les supprimées »
+show_deleted: false         # afficher les supprimées dès l'ouverture
 ```
 
 Sans `max_height`, la carte s'allonge à chaque « Voir plus ». Dans une vue en sections, vous pouvez aussi redimensionner la carte : avec un nombre de lignes fixe, la liste défile à l'intérieur. La position de défilement est conservée quand de nouvelles notifications arrivent ou qu'on en charge d'autres.
@@ -109,7 +112,7 @@ La carte déclenche `mobile_app_notification_action` avec l'`action` du bouton (
 ## Services et API WebSocket
 
 - `notification_history.clear` (`target` facultatif) : vide l'historique. Réservé aux administrateurs.
-- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
+- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`, `notification_history/delete` (`record_id`, `deleted: false` pour restaurer ; `list` accepte `include_deleted`). La suppression vaut pour tous les utilisateurs ; peut supprimer quiconque voit la notification. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
 
 ## Comment ça marche (pour les curieux)
 

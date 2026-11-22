@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.5.0";
+const CARD_VERSION = "0.6.0";
 
 const I18N = {
   en: {
@@ -22,6 +22,13 @@ const I18N = {
     day: (n) => `${n} d ago`,
     status: { replaced: "Replaced", removed: "Removed by HA", cleared: "Dismissed", action: (t) => `Button: ${t}` },
     persistent: "Persistent notification",
+    delete: "Delete",
+    restore: "Restore",
+    deleted: "Deleted",
+    deleted_ok: "Notification deleted",
+    undo: "Undo",
+    show_deleted: "Show deleted",
+    hide_deleted: "Hide deleted",
     f_title: "Title",
     f_limit: "Notifications shown before “Show more”",
     f_max_height: "Maximum height (px, empty: no limit, then scroll)",
@@ -32,6 +39,8 @@ const I18N = {
     f_groups: "Groups (data.group, empty: all)",
     f_show_group: "Show the group",
     f_frigate: "“Watch clip” button for Frigate snapshots",
+    f_delete: "Delete button (the notification stays in the history, see “Show deleted”)",
+    f_show_deleted: "Show deleted notifications by default",
   },
   fr: {
     empty: "Aucune notification.",
@@ -50,6 +59,13 @@ const I18N = {
     day: (n) => `il y a ${n} j`,
     status: { replaced: "Remplacée", removed: "Retirée par HA", cleared: "Effacée", action: (t) => `Bouton : ${t}` },
     persistent: "Notification persistante",
+    delete: "Supprimer",
+    restore: "Restaurer",
+    deleted: "Supprimée",
+    deleted_ok: "Notification supprimée",
+    undo: "Annuler",
+    show_deleted: "Afficher les supprimées",
+    hide_deleted: "Masquer les supprimées",
     f_title: "Titre",
     f_limit: "Notifications affichées avant « Voir plus »",
     f_max_height: "Hauteur maximale (px, vide : sans limite, puis défilement)",
@@ -60,6 +76,8 @@ const I18N = {
     f_groups: "Groupes (data.group, vide : tous)",
     f_show_group: "Afficher le groupe",
     f_frigate: "Bouton « Voir le clip » pour les images Frigate",
+    f_delete: "Bouton Supprimer (la notification reste dans l'historique, voir « Afficher les supprimées »)",
+    f_show_deleted: "Afficher les notifications supprimées par défaut",
   },
 };
 
@@ -107,6 +125,8 @@ class NotificationHistoryCard extends HTMLElement {
         { name: "groups", selector: { text: { multiple: true } } },
         { name: "show_group", selector: { boolean: {} } },
         { name: "frigate", selector: { boolean: {} } },
+        { name: "delete", selector: { boolean: {} } },
+        { name: "show_deleted", selector: { boolean: {} } },
       ],
       computeLabel: (s) => t(`f_${s.name}`),
     };
@@ -117,7 +137,8 @@ class NotificationHistoryCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { limit: 15, show_target: true, frigate: true, ...config };
+    this._config = { limit: 15, show_target: true, frigate: true, delete: true, ...config };
+    this._showDeleted = !!this._config.show_deleted; // switched from the card, not saved
     this._items = null;
     this._more = false;
     this._list = null; // the shell (title, styles) depends on the config: built again
@@ -203,6 +224,7 @@ class NotificationHistoryCard extends HTMLElement {
       const res = await this._hass.callWS({
         type: "notification_history/list",
         limit: beforeId ? 50 : this._config.limit,
+        include_deleted: this._showDeleted,
         ...(beforeId ? { before_id: beforeId } : {}),
         ...this._filters(),
       });
@@ -220,8 +242,18 @@ class NotificationHistoryCard extends HTMLElement {
     const r = ev.record;
     if (!r || !this._items) return;
     const i = this._items.findIndex((x) => x.id === r.id);
-    if (i >= 0) this._items[i] = r;
-    else this._items = [r, ...this._items];
+    if (r.deleted_ts && !this._showDeleted) {
+      if (i < 0) return;
+      this._items.splice(i, 1);
+    } else if (i >= 0) this._items[i] = r;
+    else {
+      // New, or restored from another card: in date order (newest first). One older than the
+      // last loaded notification comes with "Show more", so the paging stays right.
+      const at = this._items.findIndex((x) => x.ts < r.ts);
+      if (at >= 0) this._items.splice(at, 0, r);
+      else if (!this._more) this._items.push(r);
+      else return;
+    }
     this._render();
   }
 
@@ -396,7 +428,15 @@ class NotificationHistoryCard extends HTMLElement {
     this.shadowRoot.innerHTML = `<style>
         :host { display: block; height: 100%; }
         ha-card { padding: 12px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
-        .title-card { font-size: 20px; font-weight: 500; padding: 4px 4px 12px; color: var(--primary-text-color); flex: none; }
+        .header { display: flex; align-items: flex-start; gap: 8px; flex: none; }
+        .title-card { font-size: 20px; font-weight: 500; padding: 4px 4px 12px; color: var(--primary-text-color); flex: 1; min-width: 0; }
+        .toggle { flex: none; margin-bottom: 12px; font-weight: 500; font-size: 12px; padding: 4px 10px; }
+        .toggle.on { border-color: var(--primary-color); }
+        .icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+                margin: -6px -8px -6px 0; padding: 0; border: none; border-radius: 50%; background: none; cursor: pointer;
+                color: var(--secondary-text-color); }
+        .icon:hover { background: var(--secondary-background-color); }
+        .icon ha-icon { --mdc-icon-size: 18px; color: inherit; }
         .list { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; overflow-y: auto;
                 overflow-anchor: none; position: relative; scrollbar-width: thin;${mh ? ` max-height: ${mh};` : ""} }
         .list > * { flex: none; }
@@ -427,10 +467,20 @@ class NotificationHistoryCard extends HTMLElement {
         .overlay img, .overlay video { max-width: 100%; max-height: 100%; border-radius: 10px; }
       </style>
       <ha-card>
-        ${this._config.title ? `<div class="title-card">${esc(this._config.title)}</div>` : ""}
+        ${this._config.title || this._config.delete !== false
+          ? `<div class="header">
+               <div class="title-card">${esc(this._config.title || "")}</div>
+               ${this._config.delete !== false ? `<button class="btn toggle" data-toggle><ha-icon></ha-icon><span></span></button>` : ""}
+             </div>`
+          : ""}
         <div class="list"></div>
       </ha-card>`;
     this._list = this.shadowRoot.querySelector(".list");
+    this._toggle = this.shadowRoot.querySelector("[data-toggle]");
+    this._toggle?.addEventListener("click", () => {
+      this._showDeleted = !this._showDeleted;
+      this._load();
+    });
     this._nodes = new Map(); // notification id -> its element
   }
 
@@ -448,7 +498,9 @@ class NotificationHistoryCard extends HTMLElement {
     const buttons = btns
       .map((b, i) => `<button class="btn" data-b="${i}"><ha-icon icon="${b.icon}"></ha-icon>${esc(b.label)}</button>`)
       .join("");
-    return `<div class="item${n.status === "replaced" || n.status === "removed" ? " dim" : ""}">
+    const del = this._config.delete !== false;
+    const dim = n.deleted_ts || n.status === "replaced" || n.status === "removed";
+    return `<div class="item${dim ? " dim" : ""}">
             <div class="head">
               <ha-icon icon="${this._icon(n)}"></ha-icon>
               <div class="txt">
@@ -456,6 +508,8 @@ class NotificationHistoryCard extends HTMLElement {
                 <div class="meta"><span data-ts="${Number(n.ts) || 0}"></span>${this._config.show_target ? ` · ${esc(this._targetName(n))}` : ""}${this._config.show_channel && n.channel ? ` · ${esc(n.channel)}` : ""}${this._config.show_group && n.group ? ` · ${esc(n.group)}` : ""}</div>
               </div>
               ${status ? `<span class="status">${esc(status)}</span>` : ""}
+              ${n.deleted_ts ? `<span class="status">${esc(this._t.deleted)}</span>` : ""}
+              ${del ? `<button class="icon" data-del="${n.deleted_ts ? "restore" : "delete"}" title="${esc(n.deleted_ts ? this._t.restore : this._t.delete)}" aria-label="${esc(n.deleted_ts ? this._t.restore : this._t.delete)}"><ha-icon icon="${n.deleted_ts ? "mdi:restore" : "mdi:close"}"></ha-icon></button>` : ""}
             </div>
             ${n.title && n.message ? `<div class="msg">${this._linkify(n.message)}</div>` : ""}
             ${img ? `<img class="img" loading="lazy" src="${esc(img)}" alt="">` : ""}
@@ -463,15 +517,19 @@ class NotificationHistoryCard extends HTMLElement {
           </div>`;
   }
 
-  _item(html, btns) {
+  _item(id, html, btns) {
     const el = this._el(html);
     el._html = html;
+    el._id = id;
     el.querySelectorAll("img.img").forEach((im) => {
       // Image gone (e.g. purged camera event): hide it rather than show a broken icon.
       im.addEventListener("error", () => im.classList.add("ko"));
       im.addEventListener("click", () => this._overlay(`<img src="${esc(im.getAttribute("src"))}" alt="">`));
     });
     el.querySelectorAll("button[data-b]").forEach((b) => b.addEventListener("click", () => this._run(btns[Number(b.dataset.b)])));
+    el.querySelectorAll("button[data-del]").forEach((b) =>
+      b.addEventListener("click", () => this._delete(el._id, b.dataset.del === "delete"))
+    );
     // Same handling as the link buttons (same-origin paths open in HA, not a new tab).
     el.querySelectorAll("a[data-l]").forEach((a) =>
       a.addEventListener("click", (e) => {
@@ -492,6 +550,11 @@ class NotificationHistoryCard extends HTMLElement {
     const t = this._t;
     if (!this._list) this._build();
     const list = this._list;
+    if (this._toggle) {
+      this._toggle.classList.toggle("on", this._showDeleted);
+      this._toggle.querySelector("ha-icon").setAttribute("icon", this._showDeleted ? "mdi:eye-off-outline" : "mdi:delete-clock-outline");
+      this._toggle.querySelector("span").textContent = this._showDeleted ? t.hide_deleted : t.show_deleted;
+    }
     const next = new Map();
     let nodes = [];
     if (this._error) {
@@ -503,7 +566,7 @@ class NotificationHistoryCard extends HTMLElement {
         const btns = this._buttons(n);
         const html = this._itemHtml(n, btns);
         let el = this._nodes.get(n.id);
-        if (!el || el._html !== html) el = this._item(html, btns);
+        if (!el || el._html !== html) el = this._item(n.id, html, btns);
         next.set(n.id, el);
         return el;
       });
@@ -535,8 +598,21 @@ class NotificationHistoryCard extends HTMLElement {
     this.shadowRoot.appendChild(o);
   }
 
-  _toast(message) {
-    this.dispatchEvent(new CustomEvent("hass-notification", { detail: { message }, bubbles: true, composed: true }));
+  _toast(message, action) {
+    this.dispatchEvent(new CustomEvent("hass-notification", { detail: { message, action }, bubbles: true, composed: true }));
+  }
+
+  // Soft delete (or restore): the notification stays in the history, hidden unless
+  // "Show deleted" is on. The subscription brings the change to every card.
+  async _delete(id, deleted) {
+    const t = this._t;
+    try {
+      const res = await this._hass.callWS({ type: "notification_history/delete", record_id: id, deleted });
+      this._onEvent({ record: res.record });
+      if (deleted) this._toast(t.deleted_ok, { text: t.undo, action: () => this._delete(id, false) });
+    } catch (e) {
+      this._toast(t.run_ko(e.message || e));
+    }
   }
 
   async _run(b) {
