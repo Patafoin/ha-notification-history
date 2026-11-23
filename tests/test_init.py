@@ -421,3 +421,22 @@ async def test_delete_needs_to_see_the_notification(hass: HomeAssistant, loaded,
     await client.send_json_auto_id({"type": f"{DOMAIN}/delete", "record_id": record_id})
     assert (await client.receive_json())["error"]["code"] == "not_found"
     assert len((await ws_list(admin))["notifications"]) == 1
+
+
+async def test_exclude_channels_and_groups(hass: HomeAssistant, loaded, hass_ws_client) -> None:
+    fire_notify(hass, "mobile_app_phone", {"message": "Motion", "data": {"group": "cameras", "channel": "Frigate"}})
+    fire_notify(hass, "mobile_app_phone", {"message": "Backup", "data": {"group": "server", "channel": "Server"}})
+    fire_notify(hass, "mobile_app_phone", {"message": "Plain"})
+    await hass.async_block_till_done()
+    client = await hass_ws_client(hass)
+    messages = lambda res: [n["message"] for n in res["notifications"]]  # noqa: E731
+    assert messages(await ws_list(client, exclude_groups=["cameras"])) == ["Plain", "Backup"]
+    assert messages(await ws_list(client, exclude_channels=["Frigate", "Server"])) == ["Plain"]
+
+    sub = await hass_ws_client(hass)
+    await sub.send_json_auto_id({"type": f"{DOMAIN}/subscribe", "exclude_groups": ["cameras"]})
+    assert (await sub.receive_json())["success"]
+    fire_notify(hass, "mobile_app_phone", {"message": "Motion 2", "data": {"group": "cameras"}})
+    fire_notify(hass, "mobile_app_phone", {"message": "Other", "data": {"group": "misc"}})
+    await hass.async_block_till_done()
+    assert (await sub.receive_json())["event"]["record"]["message"] == "Other"

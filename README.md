@@ -71,9 +71,11 @@ targets:                    # optional, default: everything you can see
 show_target: true
 channels:                   # optional: only these Android channels
   - Frigate
+channels_mode: include      # include: only these; exclude: all except these
 show_channel: false         # show the Android channel next to the date
 groups:                     # optional: only these groups (data.group, iOS and Android)
   - cameras
+groups_mode: include        # include: only these; exclude: all except these
 show_group: false           # show the group next to the date
 frigate: true
 delete: true                # ✕ button and “Show deleted” toggle
@@ -82,7 +84,7 @@ show_deleted: false         # start with deleted notifications shown
 
 Without `max_height`, the card grows with “Show more”. In a sections view, you can also resize the card instead: with a fixed number of rows, the list scrolls inside it. The scroll position is kept when new notifications arrive or more are loaded.
 
-One card per topic: filter on the Android notification `channel` (`data.channel`) you already use in your automations, for example one card for Frigate and one for the server. Notifications without a channel (iOS, speakers, e-mail…) only show up in cards without a channel filter. On iOS, use `group` instead: the Companion app uses it on both iOS and Android to group notifications, and the `groups` option filters on it the same way.
+One card per topic: filter on the Android notification `channel` (`data.channel`) you already use in your automations, for example one card for Frigate and one for the server. Notifications without a channel (iOS, speakers, e-mail…) only show up in cards without a channel filter, or with `channels_mode: exclude`: that mode shows everything except the listed channels (same for `groups_mode`), for example a general card without the Frigate notifications that have their own card. On iOS, use `group` instead: the Companion app uses it on both iOS and Android to group notifications, and the `groups` option filters on it the same way.
 
 It also has a visual editor.
 
@@ -112,7 +114,7 @@ The card fires `mobile_app_notification_action` with the button's `action` (and 
 ## Services and WebSocket API
 
 - `notification_history.clear` (optional `target`): deletes the history. Admin only.
-- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`, `notification_history/delete` (`record_id`, `deleted: false` to restore; `list` takes `include_deleted`). Deleting is shared by every user and allowed to anyone who can see the notification. Non-admin users only get the notifications of their own devices.
+- WebSocket: `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `exclude_channels`, `exclude_groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`, `notification_history/delete` (`record_id`, `deleted: false` to restore; `list` takes `include_deleted`). Deleting is shared by every user and allowed to anyone who can see the notification. Non-admin users only get the notifications of their own devices.
 
 ## How it works (for the curious)
 

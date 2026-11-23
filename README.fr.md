@@ -71,9 +71,11 @@ targets:                    # facultatif, par défaut : tout ce que vous pouvez 
 show_target: true
 channels:                   # facultatif : seulement ces canaux Android
   - Frigate
+channels_mode: include      # include : seulement ceux-ci ; exclude : tous sauf ceux-ci
 show_channel: false         # afficher le canal Android à côté de la date
 groups:                     # facultatif : seulement ces groupes (data.group, iOS et Android)
   - cameras
+groups_mode: include        # include : seulement ceux-ci ; exclude : tous sauf ceux-ci
 show_group: false           # afficher le groupe à côté de la date
 frigate: true
 delete: true                # bouton ✕ et bascule « Afficher les supprimées »
@@ -82,7 +84,7 @@ show_deleted: false         # afficher les supprimées dès l'ouverture
 
 Sans `max_height`, la carte s'allonge à chaque « Voir plus ». Dans une vue en sections, vous pouvez aussi redimensionner la carte : avec un nombre de lignes fixe, la liste défile à l'intérieur. La position de défilement est conservée quand de nouvelles notifications arrivent ou qu'on en charge d'autres.
 
-Une carte par sujet : filtrez sur le canal de notification Android (`data.channel`) que vous utilisez déjà dans vos automatisations, par exemple une carte pour Frigate et une pour le serveur. Les notifications sans canal (iOS, enceintes, e-mail…) n'apparaissent que dans les cartes sans filtre de canal. Sur iOS, utilisez plutôt `group` : l'app Companion s'en sert sur iOS comme sur Android pour regrouper les notifications, et l'option `groups` filtre dessus de la même façon.
+Une carte par sujet : filtrez sur le canal de notification Android (`data.channel`) que vous utilisez déjà dans vos automatisations, par exemple une carte pour Frigate et une pour le serveur. Les notifications sans canal (iOS, enceintes, e-mail…) n'apparaissent que dans les cartes sans filtre de canal, ou avec `channels_mode: exclude` : ce mode affiche tout sauf les canaux listés (de même pour `groups_mode`), par exemple une carte générale sans les notifications Frigate qui ont leur propre carte. Sur iOS, utilisez plutôt `group` : l'app Companion s'en sert sur iOS comme sur Android pour regrouper les notifications, et l'option `groups` filtre dessus de la même façon.
 
 Elle a aussi un éditeur visuel.
 
@@ -112,7 +114,7 @@ La carte déclenche `mobile_app_notification_action` avec l'`action` du bouton (
 ## Services et API WebSocket
 
 - `notification_history.clear` (`target` facultatif) : vide l'historique. Réservé aux administrateurs.
-- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`, `notification_history/delete` (`record_id`, `deleted: false` pour restaurer ; `list` accepte `include_deleted`). La suppression vaut pour tous les utilisateurs ; peut supprimer quiconque voit la notification. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
+- WebSocket : `notification_history/list` (`limit`, `before_id`, `targets`, `devices`, `channels`, `groups`, `exclude_channels`, `exclude_groups`, `search`), `notification_history/subscribe`, `notification_history/targets`, `notification_history/channels`, `notification_history/groups`, `notification_history/run_action`, `notification_history/delete` (`record_id`, `deleted: false` pour restaurer ; `list` accepte `include_deleted`). La suppression vaut pour tous les utilisateurs ; peut supprimer quiconque voit la notification. Un utilisateur non administrateur ne reçoit que les notifications de ses propres appareils.
 
 ## Comment ça marche (pour les curieux)
 

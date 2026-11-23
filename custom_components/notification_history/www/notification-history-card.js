@@ -2,7 +2,7 @@
 // integration, with their image, link and buttons. Data comes from the integration's
 // WebSocket commands (notification_history/list and /subscribe), not from an entity.
 
-const CARD_VERSION = "0.6.0";
+const CARD_VERSION = "0.7.0";
 
 const I18N = {
   en: {
@@ -35,8 +35,12 @@ const I18N = {
     f_targets: "Targets (empty: all)",
     f_show_target: "Show the target name",
     f_channels: "Android channels (empty: all)",
+    f_channels_mode: "Android channels: show",
     f_show_channel: "Show the Android channel",
     f_groups: "Groups (data.group, empty: all)",
+    f_groups_mode: "Groups: show",
+    mode_include: "Only these",
+    mode_exclude: "All except these",
     f_show_group: "Show the group",
     f_frigate: "“Watch clip” button for Frigate snapshots",
     f_delete: "Delete button (the notification stays in the history, see “Show deleted”)",
@@ -72,8 +76,12 @@ const I18N = {
     f_targets: "Cibles (vide : toutes)",
     f_show_target: "Afficher le nom de la cible",
     f_channels: "Canaux Android (vide : tous)",
+    f_channels_mode: "Canaux Android : afficher",
     f_show_channel: "Afficher le canal Android",
     f_groups: "Groupes (data.group, vide : tous)",
+    f_groups_mode: "Groupes : afficher",
+    mode_include: "Seulement ceux-ci",
+    mode_exclude: "Tous sauf ceux-ci",
     f_show_group: "Afficher le groupe",
     f_frigate: "Bouton « Voir le clip » pour les images Frigate",
     f_delete: "Bouton Supprimer (la notification reste dans l'historique, voir « Afficher les supprimées »)",
@@ -113,6 +121,7 @@ class NotificationHistoryCard extends HTMLElement {
   static getConfigForm() {
     // Labels follow the language of the user editing the card.
     const t = (k) => (I18N[(document.querySelector("home-assistant")?.hass?.locale?.language || "en").slice(0, 2)] || I18N.en)[k];
+    const modes = ["include", "exclude"].map((value) => ({ value, label: t(`mode_${value}`) }));
     return {
       schema: [
         { name: "title", selector: { text: {} } },
@@ -121,8 +130,10 @@ class NotificationHistoryCard extends HTMLElement {
         { name: "targets", selector: { text: { multiple: true } } },
         { name: "show_target", selector: { boolean: {} } },
         { name: "channels", selector: { text: { multiple: true } } },
+        { name: "channels_mode", selector: { select: { mode: "dropdown", options: modes } } },
         { name: "show_channel", selector: { boolean: {} } },
         { name: "groups", selector: { text: { multiple: true } } },
+        { name: "groups_mode", selector: { select: { mode: "dropdown", options: modes } } },
         { name: "show_group", selector: { boolean: {} } },
         { name: "frigate", selector: { boolean: {} } },
         { name: "delete", selector: { boolean: {} } },
@@ -192,8 +203,11 @@ class NotificationHistoryCard extends HTMLElement {
     const f = {};
     if (Array.isArray(this._config.targets) && this._config.targets.length) f.targets = this._config.targets;
     if (Array.isArray(this._config.devices) && this._config.devices.length) f.devices = this._config.devices;
-    if (Array.isArray(this._config.channels) && this._config.channels.length) f.channels = this._config.channels;
-    if (Array.isArray(this._config.groups) && this._config.groups.length) f.groups = this._config.groups;
+    // channels_mode / groups_mode: "include" (default, only these) or "exclude" (all except these).
+    for (const k of ["channels", "groups"]) {
+      const list = this._config[k];
+      if (Array.isArray(list) && list.length) f[this._config[`${k}_mode`] === "exclude" ? `exclude_${k}` : k] = list;
+    }
     return f;
   }
 

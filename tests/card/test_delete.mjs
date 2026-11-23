@@ -58,3 +58,10 @@ card._config.delete = false;
 assert.doesNotMatch(card._itemHtml(rec("a", 1, { message: "m" }), []), /data-del/);
 
 console.log("card delete: ok");
+
+// Channel and group filters: include (default) or exclude mode.
+card._config = { channels: ["Frigate"], groups: ["cameras", "server"], groups_mode: "exclude" };
+assert.deepEqual(card._filters(), { channels: ["Frigate"], exclude_groups: ["cameras", "server"] });
+card._config = { channels: ["Frigate"], channels_mode: "exclude", groups: [] };
+assert.deepEqual(card._filters(), { exclude_channels: ["Frigate"] });
+console.log("card filters: ok");

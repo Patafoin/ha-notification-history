@@ -44,6 +44,11 @@ def _matches(record: dict[str, Any], msg: dict[str, Any]) -> bool:
         return False
     if (groups := msg.get("groups")) and record.get("group") not in groups:
         return False
+    # Exclude mode: everything except these (notifications without a channel or group are kept).
+    if record.get("channel") and record["channel"] in msg.get("exclude_channels", ()):
+        return False
+    if record.get("group") and record["group"] in msg.get("exclude_groups", ()):
+        return False
     if search := msg.get("search"):
         needle = search.casefold()
         if not any(needle in (record.get(k) or "").casefold() for k in ("title", "message", "target_name")):
@@ -56,6 +61,8 @@ FILTERS = {
     vol.Optional("devices"): [str],
     vol.Optional("channels"): [str],
     vol.Optional("groups"): [str],
+    vol.Optional("exclude_channels"): [str],
+    vol.Optional("exclude_groups"): [str],
     vol.Optional("search"): str,
 }
 
